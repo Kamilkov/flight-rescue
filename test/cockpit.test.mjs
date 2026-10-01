@@ -201,6 +201,16 @@ describe('cockpit logic', () => {
     assert.equal(logic.pick([newer], null, false, 'a').ID, 'b', 'a chosen disruption that was closed no longer counts')
   })
 
+  test('the mobile page\'s one status line after a cancel', () => {
+    assert.deepEqual(logic.mobileStatus(null, null, 3), { text: 'Waiting for ABAP to report the cancellation…', kind: 'wait' })
+    assert.deepEqual(logic.mobileStatus(null, { notifyStatus: 'F', notifyMessage: 'App answered 401 Unauthorized' }, 20),
+      { text: 'ABAP could not reach this app: App answered 401 Unauthorized', kind: 'error' })
+    assert.deepEqual(logic.mobileStatus({ agentStatus: 'Working' }, null, 5), { text: 'The agent is working on the cancellation…', kind: 'wait' })
+    assert.deepEqual(logic.mobileStatus({ agentStatus: 'AwaitingApproval' }, null, 40), { text: 'The plan is waiting for your approval.', kind: 'ready' })
+    assert.deepEqual(logic.mobileStatus({ agentStatus: 'Done' }, null, 40), { text: 'The agent finished without a plan to approve.', kind: 'done' })
+    assert.deepEqual(logic.mobileStatus({ agentStatus: 'Failed', agentMessage: 'No API key' }, null, 40), { text: 'No API key', kind: 'error' })
+  })
+
   test('dots never exceed the seats, whatever the counts', () => {
     assert.deepEqual(logic.dots(load(364, 9, 9)), { booked: 0, highlighted: 9, free: 355 })
     assert.deepEqual(logic.dots(load(264, 264, 2)), { booked: 262, highlighted: 2, free: 0 })
@@ -317,6 +327,17 @@ describe('cockpit A2A client', () => {
     assert.deepEqual((await answering(http(403, { error: { message: 'Forbidden' } }), () => agent.ask('x'))).result, { error: 'Forbidden' })
     assert.deepEqual((await answering(http(502, undefined), () => agent.ask('x'))).result, { error: 'The agent did not answer (502).' })
     assert.deepEqual((await answering(http(200, {}), () => agent.ask('x'))).result, { error: 'The agent did not answer (200).' })
+  })
+})
+
+describe('mobile page', () => {
+  test('is served next to the cockpit and uses the cockpit\'s logic and service', async () => {
+    const res = await srv.get('/cockpit/mobile.html', as('dispatcher'))
+    assert.equal(res.status, 200)
+    assert.match(res.data, /<meta name="viewport"/)
+    assert.match(res.data, /<script src="logic\.js"><\/script>/)
+    assert.match(res.data, /cancelFlight/)
+    assert.match(res.data, /href="index\.html"/, 'links to the full cockpit for the approval')
   })
 })
 

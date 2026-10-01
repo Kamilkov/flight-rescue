@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flight rescue · cancel a flight</title>
+  <style>
+    :root { color-scheme: light dark; --accent: #0a6ed1; --error: #bb0000; --ok: #107e3e; --muted: #6a6d70; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 17px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: Canvas; color: CanvasText; }
+    main { max-width: 28rem; margin: 0 auto; padding: 1.25rem 1rem 2rem; }
+    h1 { font-size: 1.4rem; margin: 0 0 1rem; }
+    label { display: block; margin-bottom: .9rem; font-size: .9rem; color: var(--muted); }
+    input { display: block; width: 100%; margin-top: .3rem; padding: .7rem; font: inherit; color: CanvasText; background: Field; border: 1px solid #8696a9; border-radius: .5rem; }
+    button { width: 100%; padding: .9rem; font: inherit; font-weight: 600; color: #fff; background: var(--accent); border: 0; border-radius: .6rem; }
+    button:disabled { opacity: .55; }
+    #status { margin: 1.2rem 0 .6rem; padding: .8rem; border-radius: .5rem; border-left: 4px solid var(--muted); }
+    #status[data-kind="ready"] { border-color: var(--ok); }
+    #status[data-kind="error"] { border-color: var(--error); color: var(--error); }
+    a { display: block; text-align: center; padding: .8rem; color: var(--accent); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Cancel a flight</h1>
+    <form id="form">
+      <label>Carrier <input name="carrierId" maxlength="3" required autocapitalize="characters" autocomplete="off"></label>
+      <label>Flight number <input name="connectionId" maxlength="4" inputmode="numeric" required autocomplete="off"></label>
+      <label>Date <input name="flightDate" type="date" required></label>
+      <label>Reason <input name="reason" maxlength="100" value="Aircraft technical issue"></label>
+      <button type="submit">Cancel flight in ABAP</button>
+    </form>
+    <p id="status" role="status" aria-live="polite" hidden></p>
+    <a id="open" href="index.html" hidden>Open the cockpit to approve</a>
+  </main>
+
+  <!-- The cockpit's logic is a UI5 module; this page runs its factory without UI5, as the tests do. -->
+  <script>window.sap = { ui: { define: (deps, factory) => { window.logic = factory() } } }</script>
+  <script src="logic.js"></script>
+  <script>
+    // Cancels a flight in ABAP and follows what happens next: ABAP's event, then the agent the server starts.
+    // Approving stays in the full cockpit.
+    async function control(path, body) {
+      const res = await fetch(`/odata/v4/control/${path}`, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error?.message ?? `The server answered ${res.status}.`)
+      return data
+    }
+    const form = document.getElementById('form'), status = document.getElementById('status'), open = document.getElementById('open')
+    const button = form.querySelector('button')
+    function show({ text, kind }) {
+      status.hidden = false
+      status.textContent = text
+      status.dataset.kind = kind
+      open.hidden = !['ready', 'done'].includes(kind)
+    }
+
+    control('demoInfo()').then(i => {
+      if (i.carrierId) for (const k of ['carrierId', 'connectionId', 'flightDate']) form.elements[k].value = i[k]
+    }).catch(() => {})
+
+    let timer = null
+    form.addEventListener('submit', async event => {
+      event.preventDefault()
+      clearInterval(timer)
+      const f = logic.flightInput(Object.fromEntries(new FormData(form)))
+      button.disabled = true
+      try {
+        await control('cancelFlight', { ...f, reason: form.elements.reason.value })
+      } catch (e) {
+        show({ text: e.message, kind: 'error' })
+        button.disabled = false
+        return
+      }
+      const since = Date.now()
+      show(logic.mobileStatus(null, null, 0))
+      timer = setInterval(async () => {
+        const seconds = (Date.now() - since) / 1000
+        try {
+          const { value: [d] } = await control(`Disruptions?$filter=carrierId eq '${f.carrierId}' and connectionId eq '${f.connectionId}' and flightDate eq ${f.flightDate} and status eq 'Open'`)
+          const c = !d && seconds >= 15 ? await control(`cancellation(carrierId='${f.carrierId}',connectionId='${f.connectionId}',flightDate=${f.flightDate})`) : null
+          const s = logic.mobileStatus(d ?? null, c, seconds)
+          show(s)
+          if (s.kind !== 'wait') { clearInterval(timer); button.disabled = false }
+        } catch (e) { show({ text: e.message, kind: 'error' }) } // the next round tries again
+      }, 2000)
+    })
+  </script>
+</body>
+</html>

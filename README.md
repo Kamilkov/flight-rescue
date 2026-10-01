@@ -62,6 +62,9 @@ One page for the whole flow, at http://localhost:4004/cockpit/index.html (sign i
 2. **Agent:** started by the server when ABAP's event arrives. Its plan appears as a card; approve or reject it.
    A cancellation from another client (for example ADT) appears the same way, but never takes the page away from a
    plan that waits for approval.
+On a phone, `/cockpit/mobile.html` has just the cancel form and one status line (waiting for ABAP, agent working,
+plan waiting for approval, or the error), with a link to this page for the approval.
+
 3. **Booking system:** one map per flight of the route, one dot per seat. The affected passengers are highlighted and move to their new flights as ABAP confirms each booking.
 
 **Reset demo** starts over. Against ABAP it runs `ZCL_FR_GENERATE_DATA` through the ADT class-run endpoint (developer user on a trial system only), which recopies `/DMO/BOOKING` and rebuilds the demo scenario, and returns the scenario's flight. Against the mock it clears disruptions, plans and the mock's cancellations; restart the app to restore the mock bookings.

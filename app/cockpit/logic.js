@@ -112,5 +112,15 @@ sap.ui.define([], () => {
     return find(chosen) ?? (reviewing ? find(current?.ID) : null) ?? list[0] ?? null
   }
 
-  return { flightLabel, note, dots, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick }
+  /** The mobile page's one status line after a cancel. d: the disruption once ABAP reported it, else null;
+   *  cancellation: ABAP's delivery status (read after 15 s). kind: wait | ready | done | error. */
+  function mobileStatus(d, cancellation, seconds) {
+    if (!d) { const w = waiting(cancellation, seconds); return { text: w.text, kind: w.failed ? 'error' : 'wait' } }
+    if (d.agentStatus === 'AwaitingApproval') return { text: 'The plan is waiting for your approval.', kind: 'ready' }
+    if (d.agentStatus === 'Done') return { text: 'The agent finished without a plan to approve.', kind: 'done' }
+    if (d.agentStatus === 'Failed') return { text: d.agentMessage || 'The agent stopped.', kind: 'error' }
+    return { text: 'The agent is working on the cancellation…', kind: 'wait' }
+  }
+
+  return { flightLabel, note, dots, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick, mobileStatus }
 })
