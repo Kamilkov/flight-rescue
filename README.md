@@ -160,5 +160,5 @@ The cockpit, on the same day and system: Reset demo seeded the scenario for LH 0
 `NotifyStatus F` with "App answered 401 Unauthorized"; with it, the live check reported the agent waiting for approval
 25 s after the cancel and `NotifyStatus S`. In one run ABAP's event reached the app 4.9 s after the cancel. From ADT,
 `ZCL_FR_CANCEL_FLIGHT` cancelled UA 0043 and the disruption appeared in the cockpit without a click. One approval of
-six moves took 12.8 s; in another run the app stalled for about a minute during an approval (cause not found: ABAP
-latency and memory were ruled out).
+six moves took 12.8 s; in another run the app stalled for about a minute during an approval. The likely cause, since
+fixed: the app has a single SQLite connection, and an incoming event held it while reading the flight from ABAP.
