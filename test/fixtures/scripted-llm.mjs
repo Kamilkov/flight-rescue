@@ -1,6 +1,8 @@
 // Test-only chat model, loaded through cds.requires.llm.impl: no network, no key. It plays the agent's
 // intended flow, step by step, from the tool results it is shown (set per test on globalThis.FR_LLM):
-//   { disruption, assignments?, extra?, stopAfterPropose? }
+//   { disruption?, assignments?, extra?, stopAfterPropose?, idle?, fail? }
+// Without `disruption` it takes the ID from "disruption <uuid>" in the first user message (the server's prompt).
+// `idle`: answers with text and calls no tool. `fail`: throws, as a model without a key would.
 // disruptionImpact → proposeRebooking (greedy earliest-first unless `assignments` is given) → applyRebooking.
 // It records the tool names it is given on globalThis.FR_LLM_TOOLS.
 import { BaseChatModel } from '@langchain/core/language_models/chat_models'
@@ -37,15 +39,20 @@ export default class ScriptedModel extends BaseChatModel {
   async _generate(messages) {
     const script = globalThis.FR_LLM ?? {}
     ;(globalThis.FR_LLM_TOOLS ??= []).push(this._tools.map(t => t.name))
+    if (script.fail) throw new Error('Scripted model failure')
+    const asText = c => typeof c === 'string' ? c : (c ?? []).map(p => p.text ?? '').join(' ')
+    const human = messages.find(m => m._getType() === 'human')
+    const disruption = script.disruption ?? asText(human?.content).match(/disruption ([0-9a-f-]{36})/)?.[1]
     const tools = messages.filter(m => m._getType() === 'tool'), last = tools.at(-1)
     const call = (name, args) => ({ generations: [{ message: new AIMessage({ content: '', tool_calls: [{ id: `c${messages.length}`, name, args }] }) }] })
     const done = text => ({ generations: [{ message: new AIMessage(text) }] })
+    if (script.idle) return done('Scripted: nothing to do.')
     const text = String(last?.content ?? '')
-    if (!last) return call('disruptionImpact', { disruption: script.disruption })
+    if (!last) return call('disruptionImpact', { disruption })
     if (last.name === 'disruptionImpact') {
       const impact = { affectedBookings: table(text, 'affectedBookings'), alternatives: table(text, 'alternatives') ?? [] }
       if (!impact.affectedBookings) return done(`Scripted end. ${text.slice(0, 300)}`)
-      return call('proposeRebooking', { disruption: script.disruption, assignments: script.assignments ?? greedy(impact), rationale: 'Scripted: earliest flights first.', ...script.extra })
+      return call('proposeRebooking', { disruption, assignments: script.assignments ?? greedy(impact), rationale: 'Scripted: earliest flights first.', ...script.extra })
     }
     if (last.name === 'proposeRebooking') {
       const plan = text.match(/\bplan: ([0-9a-f-]{36})/)?.[1]

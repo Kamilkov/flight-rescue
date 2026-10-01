@@ -5,7 +5,7 @@ using { cuid, managed } from '@sap/cds/common';
 // What this app owns. Bookings and flights stay in the ABAP system (ZFR_REBOOK); a plan only
 // records which booking should move where, and after approval what ABAP answered for each one.
 
-/** A flight a dispatcher declared cancelled in this app. ABAP is not told; only its bookings move. */
+/** A flight cancelled in ABAP, as ABAP reported it (EventsService). Only its bookings move. */
 entity Disruptions : cuid, managed {
   carrierId    : String(3)  @mandatory;
   connectionId : String(4)  @mandatory;
@@ -14,6 +14,9 @@ entity Disruptions : cuid, managed {
   airportTo    : String(3);
   reason       : String(200);
   status       : String(10) enum { Open; Closed } default 'Open';
+  agentTask    : String(100); // the A2A task the server started for this disruption, owned by the dispatcher
+  agentStatus  : String(20) enum { Working; AwaitingApproval; Done; Failed };
+  agentMessage : String(500); // why the agent stopped, when it failed
   plans        : Association to many Plans on plans.disruption = $self;
 }
 

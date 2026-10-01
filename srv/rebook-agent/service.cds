@@ -28,7 +28,7 @@ using { ZFR_REBOOK } from '../external/ZFR_REBOOK';
 @agent.connect: 'none'
 @requires: 'Dispatcher'
 service RebookAgentService {
-  @readonly entity Disruptions as projection on fr.Disruptions excluding { plans };
+  @readonly entity Disruptions as projection on fr.Disruptions excluding { plans, agentTask, agentStatus, agentMessage };
   @readonly entity Plans       as projection on fr.Plans excluding { agentTask };
   @readonly entity PlanItems   as projection on fr.PlanItems;
 

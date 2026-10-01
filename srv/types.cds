@@ -82,3 +82,9 @@ type DemoInfo {
   connectionId : String(4);
   flightDate   : Date;
 }
+
+/** What the app answers ABAP for a cancelled flight. `duplicate`: the flight already had an open disruption. */
+type EventResult {
+  disruption : UUID;
+  duplicate  : Boolean;
+}
