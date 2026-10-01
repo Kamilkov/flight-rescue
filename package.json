@@ -1,0 +1,81 @@
+{
+  "name": "flight-rescue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@cap-js/agents": "0.9.7",
+    "@cap-js/sqlite": "3.1.1",
+    "@sap/cds": "10.1.1"
+  },
+  "devDependencies": {
+    "@cap-js/cds-test": "1.0.2",
+    "@sap/cds-dk": "10.1.2"
+  },
+  "scripts": {
+    "start": "cds-serve",
+    "watch": "cds watch",
+    "test": "node --test test/*.test.mjs"
+  },
+  "cds": {
+    "requires": {
+      "db": {
+        "kind": "sqlite",
+        "credentials": {
+          "url": ":memory:"
+        }
+      },
+      "ZFR_REBOOK": {
+        "kind": "odata",
+        "model": "srv/external/ZFR_REBOOK"
+      },
+      "llm": {
+        "impl": "@cap-js/agents/lib/models/anthropic",
+        "model": "claude-opus-5-5"
+      },
+      "[development]": {
+        "llm": {
+          "impl": "@cap-js/agents/lib/models/anthropic",
+          "model": "claude-opus-5-5"
+        }
+      },
+      "[hybrid]": {
+        "llm": {
+          "impl": "@cap-js/agents/lib/models/anthropic",
+          "model": "claude-opus-5-5"
+        }
+      },
+      "[production]": {
+        "llm": {
+          "impl": "@cap-js/agents/lib/models/anthropic",
+          "model": "claude-opus-5-5"
+        }
+      },
+      "auth": {
+        "kind": "mocked",
+        "users": {
+          "dispatcher": {
+            "roles": [
+              "Dispatcher"
+            ]
+          },
+          "viewer": {
+            "roles": []
+          },
+          "alice": false,
+          "bob": false,
+          "carol": false,
+          "dave": false,
+          "erin": false,
+          "fred": false,
+          "me": false,
+          "yves": false,
+          "*": false
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,108 @@
+<mvc:View controllerName="fr.cockpit.Main" height="100%"
+  xmlns="sap.m" xmlns:mvc="sap.ui.core.mvc" xmlns:core="sap.ui.core" xmlns:fr="fr.cockpit">
+  <Page enableScrolling="false">
+    <customHeader>
+      <Bar>
+        <contentLeft>
+          <core:Icon src="sap-icon://flight" decorative="true"/>
+          <Title text="Flight rescue"/>
+        </contentLeft>
+        <contentRight>
+          <ObjectStatus visible="{= !!${/backend} }" text="{= ${/backend} === 'abap' ? 'ABAP connected' : 'Mock data' }" state="{= ${/backend} === 'abap' ? 'Success' : 'Information' }" inverted="true"/>
+          <Button icon="sap-icon://refresh" text="Reset demo" press=".onReset" enabled="{= !${/busy} }"/>
+        </contentRight>
+      </Bar>
+    </customHeader>
+    <HBox class="frPanes" renderType="Bare">
+
+      <VBox class="frPane frPane1" renderType="Bare">
+        <Title text="1  Disruption"/>
+        <MessageStrip text="{/errors/disruption}" type="Error" showIcon="true" visible="{= !!${/errors/disruption} }"/>
+        <Label text="Carrier" labelFor="carrier"/>
+        <Input id="carrier" value="{/form/carrierId}" maxLength="3" placeholder="LH"/>
+        <Label text="Flight number" labelFor="connection"/>
+        <Input id="connection" value="{/form/connectionId}" maxLength="4" placeholder="0402"/>
+        <Label text="Date" labelFor="date"/>
+        <DatePicker id="date" value="{/form/flightDate}" valueFormat="yyyy-MM-dd" displayFormat="d MMM yyyy"/>
+        <Label text="Reason" labelFor="reason"/>
+        <Input id="reason" value="{/form/reason}" maxLength="200"/>
+        <Button text="Declare disruption" type="Emphasized" press=".onDeclare" enabled="{= !${/busy} }"/>
+        <Title text="Open disruptions" level="H3" class="sapUiSmallMarginTop"/>
+        <List items="{/disruptions}" noDataText="No open disruption" showSeparators="None">
+          <CustomListItem>
+            <HBox class="frRow" renderType="Bare">
+              <VBox>
+                <Text text="{label}"/>
+                <Label text="{route} · {reason}"/>
+              </VBox>
+              <Button icon="sap-icon://decline" tooltip="Close disruption" type="Transparent" press=".onClose" enabled="{= !${/busy} }"/>
+            </HBox>
+          </CustomListItem>
+        </List>
+      </VBox>
+
+      <VBox class="frPane frPane2" renderType="Bare">
+        <Title text="2  Agent"/>
+        <MessageStrip text="{/errors/agent}" type="Error" showIcon="true" visible="{= !!${/errors/agent} }"/>
+        <VBox id="chat" class="frChat" renderType="Bare">
+          <VBox items="{/chat}" renderType="Bare">
+            <FormattedText htmlText="{html}" class="frMsg">
+              <customData><core:CustomData key="role" value="{role}" writeToDom="true"/></customData>
+            </FormattedText>
+          </VBox>
+          <VBox class="frCard" renderType="Bare" visible="{= !!${/plan} }">
+            <Title text="{/plan/title}" level="H4"/>
+            <VBox items="{/plan/groups}" renderType="Bare">
+              <HBox class="frRow" renderType="Bare">
+                <Text text="{= ${count} + (${count} === 1 ? ' booking' : ' bookings') + ' → ' + ${label} }"/>
+                <ObjectStatus text="{= ${rebooked} + ' moved' }" state="Success" visible="{= ${rebooked} > 0 }"/>
+              </HBox>
+            </VBox>
+            <ObjectStatus text="{= ${/plan/unassigned} + ' unassigned' }" state="Warning" visible="{= ${/plan/unassigned} > 0 }"/>
+            <VBox items="{/plan/failed}" renderType="Bare">
+              <ObjectStatus text="{text}" state="Error"/>
+            </VBox>
+            <Label text="{/plan/rationale}" wrapping="true"/>
+            <HBox visible="{= !!${/plan/waiting} }">
+              <Button text="Approve" type="Emphasized" press=".onApprove" enabled="{= !${/busy} }" class="sapUiTinyMarginEnd"/>
+              <Button text="Reject" press=".onReject" enabled="{= !${/busy} }"/>
+            </HBox>
+          </VBox>
+          <!-- What the agent said after proposing the plan comes after the card. -->
+          <VBox items="{/after}" renderType="Bare">
+            <FormattedText htmlText="{html}" class="frMsg">
+              <customData><core:CustomData key="role" value="{role}" writeToDom="true"/></customData>
+            </FormattedText>
+          </VBox>
+        </VBox>
+        <BusyIndicator text="{/busyText}" visible="{/busy}"/>
+        <HBox class="frAsk" renderType="Bare">
+          <Input value="{/prompt}" placeholder="Ask the agent" submit=".onAsk" enabled="{= !${/busy} }"/>
+          <Button icon="sap-icon://paper-plane" tooltip="Send" type="Emphasized" press=".onAsk" enabled="{= !${/busy} }"/>
+        </HBox>
+      </VBox>
+
+      <VBox class="frPane frPane3" renderType="Bare">
+        <Title text="{= '3  Booking system' + (${/backend} === 'abap' ? ' (ABAP)' : ' (mock)') }"/>
+        <MessageStrip text="{/errors/board}" type="Error" showIcon="true" visible="{= !!${/errors/board} }"/>
+        <Text text="Declare a disruption to see its flights." visible="{= ${/board}.length === 0 }"/>
+        <VBox items="{/board}" renderType="Bare">
+          <VBox renderType="Bare">
+            <HBox class="frRow" renderType="Bare">
+              <Text text="{label}"/>
+              <ObjectStatus text="{note}" state="{= ${cancelled} ? 'Error' : ${seatsFree} > 0 ? 'Success' : 'None' }"/>
+            </HBox>
+            <fr:SeatMap seatsMax="{seatsMax}" seatsBooked="{seatsBooked}" highlighted="{highlighted}" cancelled="{cancelled}"/>
+          </VBox>
+        </VBox>
+        <!-- The legend reuses the control: a one-seat map per dot kind. -->
+        <HBox class="frLegend" renderType="Bare">
+          <fr:SeatMap seatsMax="1" seatsBooked="1" highlighted="1"/><Label text="affected or moved"/>
+          <fr:SeatMap seatsMax="1" seatsBooked="1"/><Label text="booked"/>
+          <fr:SeatMap seatsMax="1"/><Label text="free"/>
+        </HBox>
+      </VBox>
+
+    </HBox>
+  </Page>
+</mvc:View>

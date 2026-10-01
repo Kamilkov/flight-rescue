@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" width="1200" height="600" font-family="Helvetica Neue, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475e75"/></marker>
+    <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e76500"/></marker>
+  </defs>
+  <style>
+    .t{font-size:17px;font-weight:700;fill:#1d2d3e}
+    .s{font-size:13px;fill:#475e75}
+    .m{font-family:Menlo,monospace;font-size:12.5px;fill:#1d2d3e}
+    .l{font-size:12.5px;fill:#475e75;font-style:italic}
+    .ln{stroke:#475e75;stroke-width:1.6;fill:none;marker-end:url(#a)}
+  </style>
+  <rect width="1200" height="600" fill="#ffffff"/>
+
+  <!-- LLM -->
+  <rect x="30" y="60" width="240" height="96" rx="10" fill="#f5f6f7" stroke="#a9b4be"/>
+  <text x="50" y="92" class="t">LLM</text>
+  <text x="50" y="116" class="s">cds.requires.llm</text>
+  <text x="50" y="136" class="s">Claude here · SAP AI Core on BTP</text>
+
+  <!-- Dispatcher -->
+  <rect x="30" y="250" width="240" height="150" rx="10" fill="#ebf8ff" stroke="#0070f2" stroke-width="1.5"/>
+  <text x="50" y="282" class="t">Dispatcher cockpit</text>
+  <text x="50" y="306" class="s">Freestyle SAPUI5 · Horizon</text>
+  <text x="50" y="334" class="s">1 Declare the disruption</text>
+  <text x="50" y="354" class="s">2 Chat · Approve / Reject</text>
+  <text x="50" y="374" class="s">3 Seat maps fill as ABAP confirms</text>
+
+  <!-- CAP server -->
+  <rect x="320" y="30" width="540" height="545" rx="14" fill="#f7fbff" stroke="#0070f2" stroke-dasharray="6 4"/>
+  <text x="340" y="58" class="t" fill="#0057d2">CAP server</text>
+  <text x="440" y="58" class="s">Node.js · @sap/cds 10 · @cap-js/agents</text>
+
+  <!-- Agent -->
+  <rect x="345" y="75" width="490" height="215" rx="10" fill="#fff" stroke="#0070f2" stroke-width="1.5"/>
+  <text x="365" y="104" class="t">RebookAgentService</text>
+  <text x="365" y="126" class="m">@agent · ReAct loop · A2A at /a2a/rebook-agent</text>
+  <text x="365" y="156" class="s">Tools: generated from the service, nothing else</text>
+  <rect x="365" y="168" width="215" height="30" rx="6" fill="#eef1f4"/>
+  <text x="377" y="188" class="m">describe · query (CQL)</text>
+  <text x="590" y="188" class="l">MCP adapter, generally available</text>
+  <rect x="365" y="206" width="330" height="30" rx="6" fill="#eef1f4"/>
+  <text x="377" y="226" class="m">disruptionImpact · proposeRebooking</text>
+  <rect x="365" y="244" width="160" height="32" rx="6" fill="#fff3e6" stroke="#e76500" stroke-width="1.5"/>
+  <text x="377" y="265" class="m" font-weight="700">applyRebooking</text>
+  <text x="537" y="258" class="s" fill="#aa4a00" font-weight="700">@agent.hitl</text>
+  <text x="537" y="274" class="s" fill="#aa4a00">pauses: input-required until a human resumes</text>
+
+  <!-- Control + rules -->
+  <rect x="345" y="315" width="235" height="95" rx="10" fill="#fff" stroke="#a9b4be"/>
+  <text x="365" y="343" class="t">ControlService</text>
+  <text x="365" y="365" class="s">OData V4 for the cockpit</text>
+  <text x="365" y="385" class="s">declare · plans · seats · reset</text>
+  <rect x="600" y="315" width="235" height="95" rx="10" fill="#fff" stroke="#a9b4be"/>
+  <text x="620" y="343" class="t">Rules and plans</text>
+  <text x="620" y="365" class="s">valid alternatives, seat limits,</text>
+  <text x="620" y="385" class="s">plan ↔ task binding · SQLite</text>
+
+  <!-- abap.js -->
+  <rect x="345" y="440" width="490" height="105" rx="10" fill="#fff" stroke="#a9b4be"/>
+  <text x="365" y="468" class="t">Remote service ZFR_REBOOK</text>
+  <text x="365" y="490" class="s">the only module that talks to ABAP · CDS contract = $metadata</text>
+  <text x="365" y="512" class="s">without credentials: mocked with the same checks and messages</text>
+
+  <!-- ABAP -->
+  <rect x="900" y="160" width="270" height="385" rx="14" fill="#f5faf0" stroke="#188918" stroke-width="1.5"/>
+  <text x="920" y="190" class="t" fill="#0d6a0d">ABAP Platform Trial</text>
+  <rect x="920" y="210" width="230" height="150" rx="8" fill="#fff" stroke="#9fcf9f"/>
+  <text x="935" y="236" class="t" font-size="15">ZFR_REBOOK</text>
+  <text x="935" y="256" class="s">custom RAP service · OData V4</text>
+  <text x="935" y="282" class="m">Bookings, Flights</text>
+  <text x="935" y="304" class="m">action rebook</text>
+  <text x="935" y="326" class="s">refuses STALE, FULL, ROUTE,</text>
+  <text x="935" y="344" class="s">NO_FLIGHT, CANCELLED</text>
+  <rect x="920" y="375" width="230" height="56" rx="8" fill="#fff" stroke="#9fcf9f"/>
+  <text x="935" y="400" class="m">ZFR_BOOKING</text>
+  <text x="935" y="420" class="s">copy of /DMO/BOOKING</text>
+  <rect x="920" y="445" width="230" height="80" rx="8" fill="#fff" stroke="#9fcf9f" stroke-dasharray="5 3"/>
+  <text x="935" y="470" class="m">ZCL_FR_GENERATE_DATA</text>
+  <text x="935" y="490" class="s">demo reset via ADT class run</text>
+  <text x="935" y="510" class="s">(developer trial only)</text>
+
+  <!-- arrows -->
+  <path d="M270,285 C305,285 310,200 343,200" class="ln" stroke="#0070f2"/>
+  <text x="268" y="236" class="l">A2A</text>
+  <path d="M270,365 L343,365" class="ln"/>
+  <text x="275" y="356" class="l">OData</text>
+  <path d="M345,110 C300,110 300,108 272,108" class="ln"/>
+  <path d="M590,290 L590,300 L700,300 L700,313" class="ln"/>
+  <path d="M580,362 L598,362" class="ln"/>
+  <path d="M717,410 L717,438" class="ln"/>
+  <path d="M835,470 C870,470 870,290 918,290" class="ln" stroke="#188918"/>
+  <text x="822" y="470" class="l" text-anchor="end">OData V4 →</text>
+  <path d="M835,520 C870,520 880,485 918,485" class="ln" stroke-dasharray="5 3"/>
+  <text x="822" y="530" class="l" text-anchor="end">ADT →</text>
+
+  <!-- approval loop -->
+  <text x="30" y="430" class="s" fill="#aa4a00" font-weight="700">Approve / Reject</text>
+  <text x="30" y="448" class="s" fill="#aa4a00">resumes the paused A2A task</text>
+</svg>

@@ -1,0 +1,5 @@
+@EndUserText.label: 'Flight rescue: rebooking API'
+define service ZFR_REBOOK {
+  expose ZR_FR_Booking as Bookings;
+  expose ZI_FR_Flight  as Flights;
+}

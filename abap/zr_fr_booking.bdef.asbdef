@@ -1,0 +1,29 @@
+managed implementation in class zbp_r_fr_booking unique;
+strict ( 2 );
+
+define behavior for ZR_FR_Booking alias Booking
+persistent table zfr_booking
+lock master
+authorization master ( global )
+{
+  // No external create, update or delete: the only way to change a booking is the rebook action.
+  internal update;
+  field ( readonly ) TravelId, BookingId;
+
+  action rebook parameter ZA_FR_RebookTarget result [1] $self;
+
+  mapping for zfr_booking
+    {
+      TravelId           = travel_id;
+      BookingId          = booking_id;
+      CustomerId         = customer_id;
+      CarrierId          = carrier_id;
+      ConnectionId       = connection_id;
+      FlightDate         = flight_date;
+      FlightPrice        = flight_price;
+      CurrencyCode       = currency_code;
+      BookingStatus      = booking_status;
+      LastChangedAt      = last_changed_at;
+      LocalLastChangedAt = local_last_changed_at;
+    }
+}
