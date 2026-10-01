@@ -4,15 +4,18 @@ A flight is cancelled. A **CAP-level agent** (`@cap-js/agents`, [Sep 2026 releas
 
 The server decides what is valid, the model only chooses among listed options, and the one action that changes data is `@agent.hitl`.
 
+The flight is cancelled in ABAP itself: a RAP business event reports it to the app, which starts the agent on its own. The dispatcher meets it at the approval card.
+
 ```
- dispatcher ──chat (A2A)──▶ RebookAgentService (@agent, ReAct loop in CAP)
-                              │ tools: query, describe, disruptionImpact,
-                              │        proposeRebooking, applyRebooking (@agent.hitl → pauses)
-                              ▼
-                     srv/lib/rebook.js ── rules, plans (SQLite) ──┐
-                              │                                   │
-                     srv/lib/abap.js ──OData V4──▶ ABAP trial: ZFR_REBOOK (custom RAP)
-                                                   Bookings (+ action rebook), Flights
+ cockpit ──cancelFlight──▶ ControlService ──OData V4──▶ ABAP trial: ZR_FR_FlightCancel (create, precheck)
+                                                          │ save: event FlightCancelled → bgRFC
+                                                          ▼ ZCL_FR_FLIGHTCANCEL_EVENTS, HTTP via SM59 ZFR_CAP_EVENTS
+                          EventsService /events ◀─────────┘ (user abap-events, role EventSource)
+                                │ opens the disruption, starts the agent as the dispatcher (A2A)
+                                ▼
+                     RebookAgentService (@agent, ReAct loop in CAP) ── pauses at applyRebooking (@agent.hitl)
+                                │ tools: query, describe, disruptionImpact, proposeRebooking, applyRebooking
+                     srv/lib/rebook.js ── rules, plans (SQLite) ── srv/lib/abap.js ──OData V4──▶ ZFR_REBOOK
 ```
 
 ## Layout
@@ -22,9 +25,13 @@ The server decides what is valid, the model only chooses among listed options, a
 | `abap/` | ABAP sources to create in ADT: table, generator class, CDS views, behavior, service definition |
 | `srv/external/` | The ZFR_REBOOK contract as CDS, and the mock used when no ABAP system is configured (same checks and messages as the ABAP action) |
 | `srv/rebook-agent/` | The `@agent` service. Its doc comment is the system prompt |
-| `srv/control/` | OData service for dispatchers: declare or close a disruption, read plans |
+| `srv/control/` | OData service for dispatchers: cancel a flight in ABAP, close a disruption, read plans |
+| `srv/events/` | REST service for the booking system: ABAP reports a cancelled flight here |
+| `srv/lib/agent-start.js` | Starts the agent for a reported cancellation, as the dispatcher on duty |
+| `scripts/live-check.mjs` | Cancels the demo flight on the deployed app and waits for ABAP's event and the agent |
+| `Dockerfile` | The container that runs next to the ABAP trial on the VPS |
 | `srv/lib/` | `abap.js` (the only module that calls ABAP) and `rebook.js` (impact, propose, apply) |
-| `app/cockpit/` | The dispatcher's page (SAPUI5, no build step): declare, chat with the agent, approve, watch the seats |
+| `app/cockpit/` | The dispatcher's page (SAPUI5, no build step): cancel a flight, follow the agent, approve, watch the seats |
 | `db/schema.cds` | What this app owns: disruptions, plans, plan items |
 | `test/` | `node --test` suites with a scripted model (no key, no network) |
 
@@ -41,25 +48,23 @@ npm run watch                  # http://localhost:4004
 
 Without `ABAP_URL`, ZFR_REBOOK is mocked from `srv/external/` with /DMO/-shaped sample data. Sign in with `dispatcher` (empty password). `viewer` has no role and is refused.
 
-1. Declare a disruption. There's no UI for this. Nothing in ABAP changes; the flight is only marked cancelled in this app:
-   ```sh
-   curl -u dispatcher: -H 'content-type: application/json' \
-     -d '{"carrierId":"LH","connectionId":"0400","flightDate":"2026-10-12","reason":"Aircraft technical issue"}' \
-     http://localhost:4004/odata/v4/control/declareDisruption
-   ```
-2. Open the chat preview at http://localhost:4004/a2a/rebook-agent/preview/ and write *"LH 0400 on 2026-10-12 is cancelled. Rebook the passengers."*
-3. The agent calls `disruptionImpact` (9 bookings, 6 seats on 3 alternatives), saves a plan with `proposeRebooking`, then calls `applyRebooking`, which pauses. Approve or reject in the chat.
-4. Follow the result: `GET /odata/v4/control/Plans?$expand=items`.
+1. Open the cockpit (below) and press **Cancel flight in ABAP**. The mock checks the flight like ABAP does, then
+   reports the cancellation to the app in-process, as ABAP's event handler would over HTTP.
+2. The app opens the disruption and starts the agent as `dispatcher`; the plan appears as a card. Approve or reject.
+3. Follow the result: `GET /odata/v4/control/Plans?$expand=items`.
 
 ## The cockpit
 
 One page for the whole flow, at http://localhost:4004/cockpit/index.html (sign in with `dispatcher`, empty password). It needs internet access: SAPUI5 is loaded from `ui5.sap.com`.
 
-1. **Disruption:** enter a flight and declare it cancelled.
-2. **Agent:** send the prefilled message. The agent's plan appears as a card; approve or reject it.
+1. **Disruption:** enter a flight and cancel it in the booking system. The page waits for ABAP's event; after 15 s
+   it also shows whether ABAP has reported it yet.
+2. **Agent:** started by the server when ABAP's event arrives. Its plan appears as a card; approve or reject it.
+   A cancellation from another client (for example ADT) appears the same way, but never takes the page away from a
+   plan that waits for approval.
 3. **Booking system:** one map per flight of the route, one dot per seat. The affected passengers are highlighted and move to their new flights as ABAP confirms each booking.
 
-**Reset demo** starts over. Against ABAP it runs `ZCL_FR_GENERATE_DATA` through the ADT class-run endpoint (developer user on a trial system only), which recopies `/DMO/BOOKING` and rebuilds the demo scenario, and returns the scenario's flight. Against the mock it clears disruptions and plans; restart the app to restore the mock bookings.
+**Reset demo** starts over. Against ABAP it runs `ZCL_FR_GENERATE_DATA` through the ADT class-run endpoint (developer user on a trial system only), which recopies `/DMO/BOOKING` and rebuilds the demo scenario, and returns the scenario's flight. Against the mock it clears disruptions, plans and the mock's cancellations; restart the app to restore the mock bookings.
 
 The demo scenario is on FRA–EWR, two weeks after the day the generator runs: LH 0402 with 9 bookings to cancel, and five alternatives with 2, 1, 3, 0 and 0 free seats, so the agent has to split the passengers and leave some unassigned.
 
@@ -126,8 +131,34 @@ npm test
 
 - `test/agent.test.mjs`: the real plugin and services, with ZFR_REBOOK mocked in-process. Covers impact, pause before any change, approve, reject, stale bookings, over-capacity and invented bookings, extra arguments, an edited resume, a closed disruption, and roles.
 - `test/remote.test.mjs`: the same flow over HTTP. The mock runs as a separate server that requires a login, and this app reaches it only through `ABAP_URL`/`SAP_USER`/`SAP_PASSWORD`. Covers CAP's OData queries, basic auth, the explicit bound-action path and OData error messages.
+- `test/events.test.mjs`: ABAP's event: only `abap-events` may report, a repeat changes nothing, the agent starts as the dispatcher and its paused task is the dispatcher's to approve; an idle or failing agent ends `Done` or `Failed`.
+- `test/auth.test.mjs`: with `DISPATCHER_PASSWORD` / `ABAP_EVENTS_PASSWORD` set, the mocked users need them.
 - `test/cockpit.test.mjs`: the cockpit's operations (`flightBoard`, `demoInfo`, `resetDemo`, the ADT call against a stand-in) and the page's logic and A2A client, loaded without a browser.
 
 **Verified on 2026-09-30** against an ABAP Platform Trial (A4H, release 816, package `$ZFLIGHT_RESCUE`) with `claude-opus-5-5`: all objects active, 13,144 bookings generated, binding published. Through the chat preview, an approved plan moved 3 bookings from UA 0926 to UA 0058 on 2027-02-28 (seats booked 3 → 0 and 0 → 3 in `ZI_FR_Flight`); a rejected plan for NQ 0802 changed nothing. Called directly, the action refused with `STALE`, `NO_FLIGHT`, `ROUTE` and `NO_BOOKING`. Not exercised against ABAP: `CANCELLED` and `FULL` (the generated data has no cancelled booking and no full flight), a partially applied plan, and a BTP ABAP environment with a communication arrangement. The tests use a scripted model and the mock.
 
 The cockpit, on the same day and system: Reset demo seeded the scenario for LH 0402 on 2026-10-14 (1,521 demo bookings; 2, 1, 3, 0 and 0 free seats on the alternatives, checked in `ZI_FR_Flight`). The agent proposed travel 90000003 (2) to UA 0043 on 14 Oct, travel 90000002 (3) to LH 0402 on 15 Oct and booking 90000001/0001 to UA 0043 on 15 Oct, leaving 3 unassigned; after approval `ZFR_BOOKING` showed exactly those moves and the three alternatives full. All six moves were done between three and six seconds after Approve (screenshots at those two moments), so the dots move in quick succession, roughly one a second at most. After a reset, a rejected plan left all nine bookings on LH 0402. Against the mock and the real model, the same flow worked with LH 0400.
+
+## The ABAP event and the VPS
+
+- **ABAP objects** (in `abap/`): `ZFR_FLIGHTCANCEL`, `ZR_FR_FlightCancel` with `create ( precheck )` and
+  `event FlightCancelled`, `ZCL_FR_FLIGHTCANCEL_EVENTS` (local event consumer, runs in bgRFC), `IsCancelled` on
+  `ZI_FR_Flight`, `FlightCancellations` in `ZFR_REBOOK`, and `ZCL_FR_CANCEL_FLIGHT` (cancel from ADT with F9).
+- **bgRFC** must be configured (`SBGRFCCONF`: supervisor destination, inbound destinations `BGPF`, `DEFAULT`),
+  or the event handler never runs.
+- **SM59 `ZFR_CAP_EVENTS`:** type G, host `flight-rescue`, port 4004, Basic authentication `abap-events`.
+- **Container:** service `flight-rescue` in the VPS's compose stack, on the same Docker network as the ABAP trial,
+  bound to `127.0.0.1:4024` only. `flight-rescue.env` holds `ANTHROPIC_API_KEY`, `SAP_USER`, `SAP_PASSWORD`,
+  `DISPATCHER_PASSWORD`, `ABAP_EVENTS_PASSWORD`, `ABAP_URL`, `ABAP_CLIENT`.
+- **Cockpit:** `ssh -L 4024:127.0.0.1:4024 root@<vps>`, then http://localhost:4024/cockpit/index.html.
+- **Live check:** `APP_URL=http://localhost:4024 node --env-file=<secrets> scripts/live-check.mjs`.
+- **Limits:** a failed call from ABAP is recorded on the cancellation (`NotifyStatus F`), not retried; SQLite is in
+  memory, so a container restart loses disruptions and plans. A production setup would put SAP Event Mesh between
+  ABAP and the app and use real authentication.
+
+**Verified on 2026-10-01** on the VPS (A4H trial, release 816): without the SM59 password the cancellation ended
+`NotifyStatus F` with "App answered 401 Unauthorized"; with it, the live check reported the agent waiting for approval
+25 s after the cancel and `NotifyStatus S`. In one run ABAP's event reached the app 4.9 s after the cancel. From ADT,
+`ZCL_FR_CANCEL_FLIGHT` cancelled UA 0043 and the disruption appeared in the cockpit without a click. One approval of
+six moves took 12.8 s; in another run the app stalled for about a minute during an approval (cause not found: ABAP
+latency and memory were ruled out).
