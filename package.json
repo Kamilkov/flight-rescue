@@ -65,6 +65,11 @@
           "viewer": {
             "roles": []
           },
+          "abap-events": {
+            "roles": [
+              "EventSource"
+            ]
+          },
           "alice": false,
           "bob": false,
           "carol": false,
