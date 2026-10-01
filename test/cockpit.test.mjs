@@ -173,6 +173,32 @@ describe('cockpit logic', () => {
     assert.equal(logic.note(load(364, 9, 9, { cancelled: true })), 'cancelled')
   })
 
+  test('the agent\'s progress on a disruption: working, failed, or a task to load once', () => {
+    assert.deepEqual(logic.agentView(null, null), { busy: '', error: '', load: null })
+    assert.deepEqual(logic.agentView({ agentStatus: 'Working' }, null), { busy: 'The agent is working on the cancellation', error: '', load: null })
+    assert.deepEqual(logic.agentView({ agentStatus: 'Failed', agentMessage: 'No API key' }, null), { busy: '', error: 'No API key', load: null })
+    assert.deepEqual(logic.agentView({ agentStatus: 'Failed' }, null).error, 'The agent stopped.')
+    assert.deepEqual(logic.agentView({ agentStatus: 'AwaitingApproval', agentTask: 't-1' }, null), { busy: '', error: '', load: 't-1' })
+    assert.deepEqual(logic.agentView({ agentStatus: 'AwaitingApproval', agentTask: 't-1' }, 't-1').load, null, 'loaded once')
+    assert.deepEqual(logic.agentView({ agentStatus: 'Done', agentTask: 't-2' }, null).load, 't-2', 'nothing to approve: still show its answer')
+  })
+
+  test('while ABAP has not reported a cancellation: wait 15 s, then show ABAP\'s delivery status', () => {
+    assert.deepEqual(logic.waiting(null, 3), { text: 'Waiting for ABAP to report the cancellation…', failed: false })
+    assert.deepEqual(logic.waiting({ notifyStatus: null }, 20), { text: 'Waiting for ABAP to report the cancellation (still queued in ABAP)…', failed: false })
+    assert.deepEqual(logic.waiting({ notifyStatus: 'S' }, 20), { text: 'ABAP reported the cancellation; waiting for the disruption…', failed: false })
+    assert.deepEqual(logic.waiting({ notifyStatus: 'F', notifyMessage: 'CAP answered 401 Unauthorized' }, 20),
+      { text: 'ABAP could not reach this app: CAP answered 401 Unauthorized', failed: true })
+  })
+
+  test('a new disruption takes over the page, except from a plan that waits for approval', () => {
+    const waitingOne = { ID: 'a', agentStatus: 'AwaitingApproval' }, doneOne = { ID: 'a', agentStatus: 'Done' }, newer = { ID: 'b', agentStatus: 'Working' }
+    assert.equal(logic.pick([newer, waitingOne], waitingOne).ID, 'a', 'the dispatcher keeps the plan they are reviewing')
+    assert.equal(logic.pick([newer, doneOne], doneOne).ID, 'b')
+    assert.equal(logic.pick([newer], waitingOne).ID, 'b', 'a closed disruption is no longer listed')
+    assert.equal(logic.pick([], waitingOne), null)
+  })
+
   test('dots never exceed the seats, whatever the counts', () => {
     assert.deepEqual(logic.dots(load(364, 9, 9)), { booked: 0, highlighted: 9, free: 355 })
     assert.deepEqual(logic.dots(load(264, 264, 2)), { booked: 262, highlighted: 2, free: 0 })
@@ -276,6 +302,12 @@ describe('cockpit A2A client', () => {
     assert.deepEqual([approved.taskId, approved.contextId, approved.parts], ['t-1', 'c-1', [{ kind: 'text', text: 'approve' }]])
     const rejected = (await answering(http(200, { result: {} }), () => agent.reject(old, 'Not now.'))).sent[0].body.params.message
     assert.deepEqual([rejected.taskId, rejected.parts], ['t-1', [{ kind: 'data', data: { decisions: [{ type: 'reject', message: 'Not now.' }] } }]])
+  })
+
+  test('task loads a task by its ID', async () => {
+    const got = await answering(http(200, { result: { id: 't-9' } }), () => agent.task('t-9'))
+    assert.deepEqual(got.result, { ok: { id: 't-9' } })
+    assert.deepEqual([got.sent[0].body.method, got.sent[0].body.params], ['tasks/get', { id: 't-9' }])
   })
 
   test('a failing agent rejects with a message a person can read', async () => {

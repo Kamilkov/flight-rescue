@@ -87,5 +87,29 @@ sap.ui.define([], () => {
     }
   }
 
-  return { flightLabel, note, dots, flightInput, groupPlan, planTitle, reading, html, serial }
+  /** What the page shows for the agent's work on a disruption. load: the task to fetch and show, once. */
+  function agentView(d, loadedTask) {
+    if (d?.agentStatus === 'Working') return { busy: 'The agent is working on the cancellation', error: '', load: null }
+    if (d?.agentStatus === 'Failed') return { busy: '', error: d.agentMessage || 'The agent stopped.', load: null }
+    const ready = ['AwaitingApproval', 'Done'].includes(d?.agentStatus) && d.agentTask && d.agentTask !== loadedTask
+    return { busy: '', error: '', load: ready ? d.agentTask : null }
+  }
+
+  /** The text while ABAP has not reported a cancellation yet; after 15 s with ABAP's delivery status.
+   *  failed: ABAP gave up (its call to this app failed), so the page stops waiting. */
+  function waiting(cancellation, seconds) {
+    if (seconds < 15 || !cancellation) return { text: 'Waiting for ABAP to report the cancellation…', failed: false }
+    if (cancellation.notifyStatus === 'F') return { text: `ABAP could not reach this app: ${cancellation.notifyMessage ?? 'no reason given'}`, failed: true }
+    if (cancellation.notifyStatus === 'S') return { text: 'ABAP reported the cancellation; waiting for the disruption…', failed: false }
+    return { text: 'Waiting for ABAP to report the cancellation (still queued in ABAP)…', failed: false }
+  }
+
+  /** The open disruption the page works on: the newest (list is newest first), unless the current one's plan
+   *  waits for approval; a cancellation from elsewhere must not pull the plan away from the dispatcher. */
+  function pick(list, current) {
+    const still = current && list.find(d => d.ID === current.ID)
+    return still?.agentStatus === 'AwaitingApproval' ? still : list[0] ?? null
+  }
+
+  return { flightLabel, note, dots, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick }
 })

@@ -25,8 +25,9 @@
         <Label text="Date" labelFor="date"/>
         <DatePicker id="date" value="{/form/flightDate}" valueFormat="yyyy-MM-dd" displayFormat="d MMM yyyy"/>
         <Label text="Reason" labelFor="reason"/>
-        <Input id="reason" value="{/form/reason}" maxLength="200"/>
-        <Button text="Declare disruption" type="Emphasized" press=".onDeclare" enabled="{= !${/busy} }"/>
+        <Input id="reason" value="{/form/reason}" maxLength="100"/>
+        <Button text="Cancel flight in ABAP" type="Emphasized" press=".onCancel" enabled="{= !${/busy} }"/>
+        <Text text="{/waiting}" visible="{= !!${/waiting} }" class="sapUiTinyMarginTop"/>
         <Title text="Open disruptions" level="H3" class="sapUiSmallMarginTop"/>
         <List items="{/disruptions}" noDataText="No open disruption" showSeparators="None">
           <CustomListItem>
@@ -76,6 +77,7 @@
           </VBox>
         </VBox>
         <BusyIndicator text="{/busyText}" visible="{/busy}"/>
+        <BusyIndicator text="{/agentBusy}" visible="{= !!${/agentBusy} &amp;&amp; !${/busy} }"/>
         <HBox class="frAsk" renderType="Bare">
           <Input value="{/prompt}" placeholder="Ask the agent" submit=".onAsk" enabled="{= !${/busy} }"/>
           <Button icon="sap-icon://paper-plane" tooltip="Send" type="Emphasized" press=".onAsk" enabled="{= !${/busy} }"/>
@@ -85,7 +87,7 @@
       <VBox class="frPane frPane3" renderType="Bare">
         <Title text="{= '3  Booking system' + (${/backend} === 'abap' ? ' (ABAP)' : ' (mock)') }"/>
         <MessageStrip text="{/errors/board}" type="Error" showIcon="true" visible="{= !!${/errors/board} }"/>
-        <Text text="Declare a disruption to see its flights." visible="{= ${/board}.length === 0 }"/>
+        <Text text="Cancel a flight to see its route." visible="{= ${/board}.length === 0 }"/>
         <VBox items="{/board}" renderType="Bare">
           <VBox renderType="Bare">
             <HBox class="frRow" renderType="Bare">

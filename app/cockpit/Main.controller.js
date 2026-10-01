@@ -2,8 +2,8 @@
 sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './agent', './logic'], (Controller, JSONModel, agent, logic) => {
   'use strict'
   const CONTROL = '/odata/v4/control'
-  // What one conversation holds; cleared by declare, close and reset.
-  const conversation = () => ({ chat: [], after: [], prompt: '', task: null, planID: null, affected: 0, plan: null })
+  // What one conversation holds; cleared when the page switches disruption, on close and on reset.
+  const conversation = () => ({ chat: [], after: [], prompt: '', task: null, planID: null, affected: 0, plan: null, loadedTask: null })
 
   // One call to the control service: a GET, or a POST when there is a body. Rejects with the server's message.
   async function control(path, body) {
@@ -16,12 +16,15 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
   return Controller.extend('fr.cockpit.Main', {
     onInit() {
       this.model = new JSONModel({
-        backend: '', busy: false, busyText: '', errors: { disruption: '', agent: '', board: '' },
+        backend: '', busy: false, busyText: '', waiting: '', agentBusy: '', errors: { disruption: '', agent: '', board: '' },
         form: { carrierId: '', connectionId: '', flightDate: '', reason: 'Aircraft technical issue' },
         disruptions: [], disruption: null, board: [], ...conversation()
       })
       this.getView().setModel(this.model)
       this.refresh = logic.serial(this.refresh.bind(this)) // the polls during an approval must not overlap
+      this.poll = logic.serial(this.poll.bind(this))
+      // ABAP's events arrive on the server, from this page's cancel or from any other RAP client: look every 2 s.
+      setInterval(() => this.poll(), 2000)
       this.run('disruption', 'Loading', async () => {
         this.demo(await control('demoInfo()'))
         await this.loadDisruptions()
@@ -48,12 +51,14 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       for (const [key, value] of Object.entries(conversation())) this.set(`/${key}`, value)
     },
 
-    // The most recently declared open disruption is the one the page works on.
+    // The page works on the newest open disruption, unless the current one's plan waits for approval.
     async loadDisruptions() {
       const { value } = await control("Disruptions?$filter=status eq 'Open'&$orderby=createdAt desc")
       const list = value.map(d => ({ ...d, label: logic.flightLabel(d), route: `${d.airportFrom}–${d.airportTo}` }))
+      const current = this.get('/disruption'), next = logic.pick(list, current)
       this.set('/disruptions', list)
-      this.set('/disruption', list[0] ?? null)
+      if (next?.ID !== current?.ID) this.clear()
+      this.set('/disruption', next)
     },
 
     // Reads the booking system's seats and the plan. Called after every action and once a second during an approval.
@@ -72,6 +77,34 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
           })
         }
       } catch (e) { this.set('/errors/board', e.message) }
+    },
+
+    // New disruptions, the agent's progress on the current one, and while a cancel waits, ABAP's delivery status.
+    async poll() {
+      if (this.get('/busy')) return // an approval runs; it refreshes the page itself
+      try {
+        await this.loadDisruptions()
+        const d = this.get('/disruption'), e = this.expected
+        if (e) {
+          if (d && d.carrierId === e.carrierId && d.connectionId === e.connectionId && d.flightDate === e.flightDate) {
+            this.expected = null
+            this.set('/waiting', '')
+          } else {
+            const seconds = (Date.now() - e.since) / 1000
+            const c = seconds < 15 ? null : await control(`cancellation(carrierId='${e.carrierId}',connectionId='${e.connectionId}',flightDate=${e.flightDate})`).catch(() => null)
+            const w = logic.waiting(c, seconds)
+            this.set('/waiting', w.failed ? '' : w.text)
+            if (w.failed) { this.expected = null; this.set('/errors/disruption', w.text) }
+          }
+        }
+        const v = logic.agentView(d, this.get('/loadedTask'))
+        this.set('/agentBusy', v.busy)
+        if (v.error) this.set('/errors/agent', v.error)
+        if (v.load) {
+          this.set('/loadedTask', v.load)
+          await this.answer(await agent.task(v.load))
+        } else await this.refresh()
+      } catch (err) { this.set('/errors/board', err.message) }
     },
 
     say(role, text) {
@@ -95,14 +128,12 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       await this.refresh()
     },
 
-    onDeclare() {
-      this.run('disruption', 'Declaring the disruption', async () => {
+    onCancel() {
+      this.run('disruption', 'Cancelling the flight in ABAP', async () => {
         const f = logic.flightInput(this.get('/form'))
-        await control('declareDisruption', { ...f, reason: this.get('/form/reason') })
-        this.clear()
-        await this.loadDisruptions()
-        await this.refresh()
-        this.set('/prompt', `${f.carrierId} ${f.connectionId} on ${f.flightDate} is cancelled. Rebook the passengers.`)
+        await control('cancelFlight', { ...f, reason: this.get('/form/reason') })
+        this.expected = { ...f, since: Date.now() }
+        this.set('/waiting', logic.waiting(null, 0).text)
       })
     },
 
@@ -142,6 +173,8 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       this.run('disruption', 'Resetting the demo data', async () => {
         const info = await control('resetDemo', {})
         this.clear()
+        this.expected = null
+        this.set('/waiting', '')
         this.demo(info)
         await this.loadDisruptions()
         await this.refresh()
