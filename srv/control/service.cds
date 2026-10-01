@@ -1,7 +1,7 @@
 using fr from '../../db/schema';
 using from '../types';
 
-/** For dispatchers: declare and close disruptions, and follow plans and what ABAP answered. */
+/** For dispatchers: cancel flights in the booking system, close disruptions, follow plans and what ABAP answered. */
 @path: '/odata/v4/control'
 @requires: 'Dispatcher'
 service ControlService {
@@ -9,8 +9,10 @@ service ControlService {
   @readonly entity Plans       as projection on fr.Plans;
   @readonly entity PlanItems   as projection on fr.PlanItems;
 
-  /** Declare a flight cancelled in this app. The flight must exist in ABAP; its bookings are not touched. */
-  action declareDisruption(carrierId : String(3), connectionId : String(4), flightDate : Date, reason : String(200)) returns Disruptions;
+  /** Cancel a flight in the booking system. ABAP then reports it to this app, which opens the disruption and starts the agent. */
+  action cancelFlight(carrierId : String(3), connectionId : String(4), flightDate : Date, reason : String(100)) returns fr.Cancellation;
+  /** The flight's cancellation in the booking system, with whether ABAP has reported it to this app yet. Changes nothing. */
+  function cancellation(carrierId : String(3), connectionId : String(4), flightDate : Date) returns fr.Cancellation;
   /** Close a disruption; its Pending plan is superseded and can no longer be approved. */
   action closeDisruption(disruption : UUID) returns Disruptions;
 

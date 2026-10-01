@@ -3,9 +3,25 @@ const cds = require('@sap/cds')
 // Local stand-in for the ABAP behavior implementation (abap/zbp_r_fr_booking.clas.locals_imp.abap):
 // the same checks, in the same order, with the same messages (at most 50 characters, see there). Used only while ZFR_REBOOK is mocked.
 // Seats are counters here; in ABAP they are derived from ZFR_BOOKING (ZI_FR_Flight).
+// The mock's stand-in for ZCL_FR_FLIGHTCANCEL_EVENTS: reports the cancellation to EventsService in this process.
+// In a stand-alone mock (test/remote.test.mjs) there is none, and the delivery fails, as it would in ABAP.
+async function notify(c) {
+  let status = 'S', message = null
+  try {
+    const events = cds.services.EventsService
+    if (!events) throw new Error('No EventsService in this process.')
+    await events.tx({ user: new cds.User({ id: 'abap-events', roles: ['EventSource'] }) }, tx => tx.send('flightCancelled',
+      { carrierId: c.CarrierId, connectionId: c.ConnectionId, flightDate: String(c.FlightDate).slice(0, 10), reason: c.Reason }))
+  } catch (e) {
+    status = 'F'; message = String(e.message).slice(0, 200)
+  }
+  await cds.db.tx(tx => tx.run(UPDATE('ZFR_REBOOK.FlightCancellations').set({ NotifyStatus: status, NotifyMessage: message })
+    .where({ CarrierId: c.CarrierId, ConnectionId: c.ConnectionId, FlightDate: c.FlightDate })))
+}
+
 module.exports = class ZFR_REBOOK extends cds.ApplicationService {
   init() {
-    const { Bookings, Flights } = this.entities
+    const { Bookings, Flights, FlightCancellations } = this.entities
     const iso = d => String(d).slice(0, 10)
 
     this.on('rebook', Bookings, async req => {
@@ -34,6 +50,23 @@ module.exports = class ZFR_REBOOK extends cds.ApplicationService {
       await UPDATE(Bookings, key).with({ CarrierId: t.CarrierId, ConnectionId: t.ConnectionId, FlightDate: t.FlightDate, LastChangedAt: new Date().toISOString(), LocalLastChangedAt: new Date().toISOString() })
       return SELECT.one.from(Bookings, key)
     })
+
+    // Like ABAP's precheck on create (abap/zbp_r_fr_flightcancel.clas.locals_imp.abap): same checks, same messages.
+    this.before('CREATE', FlightCancellations, async req => {
+      const k = req.data, key = { CarrierId: k.CarrierId, ConnectionId: k.ConnectionId, FlightDate: k.FlightDate }
+      const name = `${k.CarrierId} ${k.ConnectionId} ${iso(k.FlightDate)}`
+      if (!await SELECT.one.from(Flights).where(key)) return req.reject(400, `NO_FLIGHT: ${name} does not exist.`)
+      if (await SELECT.one.from(FlightCancellations).where(key)) return req.reject(400, `ALREADY_CANCELLED: ${name}.`)
+      Object.assign(req.data, { CreatedBy: req.user.id, CreatedAt: new Date().toISOString(), NotifyStatus: null, NotifyMessage: null })
+    })
+    this.after('CREATE', FlightCancellations, async (_, req) => {
+      const c = req.data // the result of an INSERT is a count, not the row
+      await UPDATE(Flights).set({ IsCancelled: true }).where({ CarrierId: c.CarrierId, ConnectionId: c.ConnectionId, FlightDate: c.FlightDate })
+      // ABAP raises FlightCancelled on save, and its handler calls the app after the commit (bgRFC). So does the mock.
+      // In-process the mock runs inside the app's request: only that root transaction reports 'succeeded'.
+      cds.context.on('succeeded', () => notify(c))
+    })
+    this.on(['UPDATE', 'DELETE'], FlightCancellations, req => req.reject(405, 'A cancellation cannot be changed.'))
     return super.init()
   }
 }

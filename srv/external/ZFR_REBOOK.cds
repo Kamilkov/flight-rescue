@@ -41,6 +41,20 @@ service ZFR_REBOOK {
         SeatsMax      : Integer not null;
         SeatsBooked   : Integer not null;
         SeatsFree     : Integer not null;
+        IsCancelled   : Boolean; // a ZFR_FLIGHTCANCEL row exists for the flight
+  }
+
+  /** A flight cancellation (ZR_FR_FlightCancel). Creating one cancels the flight; ABAP then reports it to this app. */
+  entity FlightCancellations {
+    key CarrierId     : String(3) not null;
+    key ConnectionId  : String(4) not null;
+    key FlightDate    : Date not null;
+        Reason        : String(100);
+        CreatedBy     : String(12);
+        CreatedAt     : Timestamp;
+        NotifyStatus  : String(1);   // empty: not reported yet, S: reported, F: the call to this app failed
+        NotifyMessage : String(200); // why it failed
+        SAP__Messages : many SAP__Message;
   }
 
   /** RAP adds bound messages to every entity with behavior. */

@@ -76,6 +76,33 @@ function messageOf(e) {
   return String(typeof text === 'object' ? text.value : text).slice(0, 480)
 }
 
+/** Cancels a flight in ABAP: creates its cancellation. Rejects with ABAP's message (NO_FLIGHT, ALREADY_CANCELLED). */
+async function cancelFlight({ carrierId, connectionId, flightDate, reason }) {
+  const key = { CarrierId: carrierId, ConnectionId: connectionId, FlightDate: iso(flightDate) }
+  check(key, FLIGHT, 'flight')
+  const srv = await api()
+  try {
+    await srv.run(INSERT.into(srv.entities.FlightCancellations).entries({ ...key, Reason: String(reason ?? '').slice(0, 100) }))
+  } catch (e) {
+    throw cds.error(400, messageOf(e))
+  }
+  return cancellation({ carrierId, connectionId, flightDate })
+}
+
+/** A flight's cancellation with ABAP's delivery status (NotifyStatus), or undefined. */
+async function cancellation({ carrierId, connectionId, flightDate }) {
+  const key = { CarrierId: carrierId, ConnectionId: connectionId, FlightDate: iso(flightDate) }
+  check(key, FLIGHT, 'flight')
+  const srv = await api()
+  return padded(await srv.run(SELECT.one.from(srv.entities.FlightCancellations).where(key)))
+}
+
+/** Mock only: forgets its cancellations, as ZCL_FR_GENERATE_DATA clears ZFR_FLIGHTCANCEL in ABAP. */
+async function resetMockCancellations() {
+  await DELETE.from('ZFR_REBOOK.FlightCancellations')
+  await UPDATE('ZFR_REBOOK.Flights').set({ IsCancelled: null })
+}
+
 const MOCK_DEMO = { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12' } // srv/external/data
 const connected = () => !!cds.env.requires.ZFR_REBOOK?.credentials?.url
 
@@ -101,4 +128,4 @@ async function resetDemo() {
   return { carrierId: m[1], connectionId: m[2], flightDate: m[3] }
 }
 
-module.exports = { flight, bookingsOn, sameRoute, rebook, iso, plusDays, padded, connected, resetDemo, MOCK_DEMO }
+module.exports = { flight, bookingsOn, sameRoute, rebook, cancelFlight, cancellation, resetMockCancellations, iso, plusDays, padded, connected, resetDemo, MOCK_DEMO }

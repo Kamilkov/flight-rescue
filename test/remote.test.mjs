@@ -42,6 +42,14 @@ const opts = { validateStatus: () => true, auth: { username: 'dispatcher', passw
 const ok = (res, status = 200) => { assert.equal(res.status, status, JSON.stringify(res.data)); return res.data }
 const rpc = (method, params) => srv.post('/a2a/rebook-agent', { jsonrpc: '2.0', id: randomUUID(), method, params }, opts)
 const message = (parts, extra = {}) => ({ message: { kind: 'message', role: 'user', messageId: randomUUID(), parts, ...extra } })
+const until = async (fn, ms = 20000) => {
+  for (const end = Date.now() + ms; ; await new Promise(r => setTimeout(r, 50))) {
+    const v = await fn()
+    if (v) return v
+    if (Date.now() > end) throw new Error('timed out')
+  }
+}
+const events = { validateStatus: () => true, auth: { username: 'abap-events', password: '' } }
 
 describe('over HTTP, as against the ABAP trial', () => {
   test('ZFR_REBOOK is remote, not mocked in this process', async () => {
@@ -49,11 +57,14 @@ describe('over HTTP, as against the ABAP trial', () => {
     assert.equal(cds.env.requires.ZFR_REBOOK.credentials.url, `${base}/odata/v4/zfr-rebook`)
   })
 
-  test('declare, propose, approve: bookings move in the remote system; a stale booking reports its OData error', async () => {
-    const disruption = ok(await srv.post('/odata/v4/control/declareDisruption', { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12' }, opts))
+  test('event, propose, approve: bookings move in the remote system; a stale booking reports its OData error', async () => {
+    // What ABAP's event handler sends; the remote mock is another process and cannot call this app itself.
+    globalThis.FR_LLM = {}
+    const { disruption: ID } = ok(await srv.post('/events/flightCancelled', { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12' }, events))
+    const disruption = await until(async () => { const d = await SELECT.one.from('fr.Disruptions', ID); return d.agentStatus !== 'Working' && d })
+    assert.equal(disruption.agentStatus, 'AwaitingApproval', disruption.agentMessage)
     assert.deepEqual([disruption.airportFrom, disruption.airportTo], ['FRA', 'JFK'], 'flight read through $filter')
-    globalThis.FR_LLM = { disruption: disruption.ID }
-    const t = (await rpc('message/send', message([{ kind: 'text', text: 'Rebook LH 0400 on 2026-10-12.' }]))).data.result
+    const t = (await rpc('tasks/get', { id: disruption.agentTask })).data.result
     assert.equal(t.status.state, 'input-required', JSON.stringify(t.status))
     const plan = t.status.message.metadata['sap.cds.agents.hitl'].actionRequests[0].args.plan
     const planned = await SELECT.from('fr.PlanItems').where({ plan_ID: plan }).orderBy('travelId', 'bookingId')
@@ -80,6 +91,19 @@ describe('over HTTP, as against the ABAP trial', () => {
       const b = await abapGet(`Bookings(TravelId='${i.travelId}',BookingId='${i.bookingId}')`)
       assert.deepEqual([b.CarrierId, b.ConnectionId, b.FlightDate], [i.toCarrierId, i.toConnectionId, i.toFlightDate])
     }
+  })
+
+  test('cancelFlight creates the cancellation remotely; a second one is refused with the booking system\'s message', async () => {
+    const c = ok(await srv.post('/odata/v4/control/cancelFlight', { carrierId: 'UA', connectionId: '0941', flightDate: '2026-10-13', reason: 'Crew' }, opts))
+    assert.deepEqual([c.carrierId, c.connectionId, c.flightDate, c.reason], ['UA', '0941', '2026-10-13', 'Crew'])
+    const again = await srv.post('/odata/v4/control/cancelFlight', { carrierId: 'UA', connectionId: '0941', flightDate: '2026-10-13' }, opts)
+    assert.equal(again.status, 400)
+    assert.equal(again.data.error.message, 'ALREADY_CANCELLED: UA 0941 2026-10-13.')
+    const later = await until(async () => {
+      const r = ok(await srv.get(`/odata/v4/control/cancellation(carrierId='UA',connectionId='0941',flightDate=2026-10-13)`, opts))
+      return r.notifyStatus && r
+    })
+    assert.equal(later.notifyStatus, 'F', 'the stand-alone mock has no events endpoint to call')
   })
 
   test('a wrong password is refused by the remote system', async () => {

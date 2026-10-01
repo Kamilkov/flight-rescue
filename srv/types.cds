@@ -88,3 +88,13 @@ type EventResult {
   disruption : UUID;
   duplicate  : Boolean;
 }
+
+/** A flight cancelled in the booking system. notifyStatus: empty until ABAP reported it here, S reported, F failed. */
+type Cancellation {
+  carrierId     : String(3);
+  connectionId  : String(4);
+  flightDate    : Date;
+  reason        : String(100);
+  notifyStatus  : String(1);
+  notifyMessage : String(200);
+}

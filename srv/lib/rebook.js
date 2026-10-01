@@ -28,7 +28,7 @@ async function impact(req, disruptionID) {
   const heldOn = Object.fromEntries(held.map(h => [flightKey({ carrierId: h.toCarrierId, connectionId: h.toConnectionId, flightDate: h.toFlightDate }), Number(h.seats)]))
   const disrupted = new Set((await SELECT.from('fr.Disruptions').where({ status: 'Open' })).map(flightKey))
 
-  const alternatives = flights.filter(f => !disrupted.has(flightKey(f))).map(f => {
+  const alternatives = flights.filter(f => !f.IsCancelled && !disrupted.has(flightKey(f))).map(f => {
     const seatsHeld = heldOn[flightKey(f)] ?? 0
     return {
       carrierId: f.CarrierId, connectionId: f.ConnectionId, flightDate: abap.iso(f.FlightDate),

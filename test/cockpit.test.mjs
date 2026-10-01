@@ -31,10 +31,26 @@ const lastText = t => t.status.message.parts.filter(p => p.kind === 'text').map(
 const row = f => [f.carrierId, f.connectionId, f.flightDate, f.seatsBooked, f.seatsFree, f.cancelled, f.highlighted]
 const bookings = () => SELECT.from('ZFR_REBOOK.Bookings').columns('TravelId', 'BookingId', 'CarrierId', 'ConnectionId', 'FlightDate').orderBy('TravelId', 'BookingId')
 
+const until = async (fn, ms = 20000) => {
+  for (const end = Date.now() + ms; ; await new Promise(r => setTimeout(r, 50))) {
+    const v = await fn()
+    if (v) return v
+    if (Date.now() > end) throw new Error('timed out')
+  }
+}
+// ABAP's event opens the disruption; wait until the agent it started has finished.
+const opened = (carrierId, connectionId, flightDate) => until(async () => {
+  const d = await SELECT.one.from('fr.Disruptions').where({ carrierId, connectionId, flightDate, status: 'Open' })
+  return d && d.agentStatus !== 'Working' && d
+})
+
 let disruption
 beforeEach(async () => {
   await srv.data.reset()
-  disruption = ok(await control('declareDisruption', { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12', reason: 'Aircraft technical issue' })).ID
+  globalThis.FR_LLM_TOOLS = []
+  globalThis.FR_LLM = { idle: true } // the agent ABAP's event starts finds nothing to do; each test asks it itself
+  ok(await control('cancelFlight', { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12', reason: 'Aircraft technical issue' }))
+  disruption = (await opened('LH', '0400', '2026-10-12')).ID
   globalThis.FR_LLM = { disruption }
 })
 
@@ -103,8 +119,11 @@ describe('demo reset', () => {
     const before = await bookings()
     assert.deepEqual(flight(ok(await control('resetDemo'))), MOCK)
     for (const entity of ['fr.Disruptions', 'fr.Plans', 'fr.PlanItems']) assert.equal((await SELECT.from(entity)).length, 0, entity)
+    assert.deepEqual(await SELECT.from('ZFR_REBOOK.FlightCancellations'), [], 'the mock\'s cancellations too')
     assert.match(lastText(task(await approve(t))), /NO_PLAN/)
     assert.deepEqual(await bookings(), before)
+    globalThis.FR_LLM = { idle: true }
+    ok(await control('cancelFlight', { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12' })) // the demo flight can be cancelled again
   })
 
   test('connected to ABAP, resetDemo runs the generator through ADT with a CSRF token and returns its demo flight', async () => {

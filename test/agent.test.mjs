@@ -36,11 +36,26 @@ const plans = () => SELECT.from('fr.Plans').columns('ID', 'status', 'agentTask',
 const items = plan => SELECT.from('fr.PlanItems').columns('travelId', 'bookingId', 'toCarrierId', 'toConnectionId', 'toFlightDate', 'status', 'message').where({ plan_ID: plan }).orderBy('travelId', 'bookingId')
 const onFlight = (rows, c, n, d) => rows.filter(b => b.CarrierId === c && b.ConnectionId === n && b.FlightDate === d && b.BookingStatus !== 'X').map(b => `${b.TravelId}/${b.BookingId}`)
 
+const until = async (fn, ms = 20000) => {
+  for (const end = Date.now() + ms; ; await new Promise(r => setTimeout(r, 50))) {
+    const v = await fn()
+    if (v) return v
+    if (Date.now() > end) throw new Error('timed out')
+  }
+}
+// ABAP's event opens the disruption; wait until the agent it started has finished.
+const opened = (carrierId, connectionId, flightDate) => until(async () => {
+  const d = await SELECT.one.from('fr.Disruptions').where({ carrierId, connectionId, flightDate, status: 'Open' })
+  return d && d.agentStatus !== 'Working' && d
+})
+
 let disruption
 beforeEach(async () => {
   await srv.data.reset()
   globalThis.FR_LLM_TOOLS = []
-  disruption = ok(await control('declareDisruption', { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12', reason: 'Aircraft technical issue' })).ID
+  globalThis.FR_LLM = { idle: true } // the agent ABAP's event starts finds nothing to do; each test asks it itself
+  ok(await control('cancelFlight', { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12', reason: 'Aircraft technical issue' }))
+  disruption = (await opened('LH', '0400', '2026-10-12')).ID
   globalThis.FR_LLM = { disruption }
 })
 
@@ -56,6 +71,16 @@ describe('impact', () => {
     ], 'no FRA-EWR flight, no full UA 0941 on 10-13, nothing after 10-14')
     assert.equal(impact.seatsAvailable, 6)
     assert.match(impact.note, /3 will stay unassigned/)
+  })
+
+  test('a flight cancelled in the booking system is no alternative, even after its disruption was closed', async () => {
+    globalThis.FR_LLM = { idle: true }
+    ok(await control('cancelFlight', { carrierId: 'UA', connectionId: '0941', flightDate: '2026-10-12', reason: 'Crew' }))
+    const ua = await opened('UA', '0941', '2026-10-12')
+    ok(await control('closeDisruption', { disruption: ua.ID }))
+    const { RebookAgentService } = cds.services
+    const impact = await RebookAgentService.tx({ user: new cds.User({ id: 'dispatcher', roles: ['Dispatcher'] }) }, tx => tx.send('disruptionImpact', { disruption }))
+    assert.deepEqual(impact.alternatives.map(a => `${a.carrierId} ${a.connectionId} ${a.flightDate}`), ['LH 0400 2026-10-13', 'LH 0400 2026-10-14'])
   })
 })
 
@@ -156,9 +181,18 @@ describe('agent: refusals', () => {
     assert.deepEqual(await abap.bookings(), before)
   })
 
-  test('declaring the same flight twice is refused', async () => {
-    const r = await control('declareDisruption', { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12' })
-    assert.equal(r.status, 409)
+  test('cancelling the same flight twice is refused by the booking system', async () => {
+    const r = await control('cancelFlight', { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12' })
+    assert.equal(r.status, 400)
+    assert.equal(r.data.error.message, 'ALREADY_CANCELLED: LH 0400 2026-10-12.')
+    const unknown = await control('cancelFlight', { carrierId: 'LH', connectionId: '0400', flightDate: '2026-01-01' })
+    assert.equal(unknown.data.error.message, 'NO_FLIGHT: LH 0400 2026-01-01 does not exist.')
+  })
+
+  test('the booking system reports the cancellation to the app, and its delivery status says so', async () => {
+    const c = ok(await srv.get(`/odata/v4/control/cancellation(carrierId='LH',connectionId='0400',flightDate=2026-10-12)`, opts('dispatcher')))
+    assert.deepEqual([c.carrierId, c.connectionId, c.flightDate, c.reason, c.notifyStatus], ['LH', '0400', '2026-10-12', 'Aircraft technical issue', 'S'])
+    assert.equal((await srv.get(`/odata/v4/control/cancellation(carrierId='UA',connectionId='0941',flightDate=2026-10-12)`, opts('dispatcher'))).status, 404)
   })
 })
 

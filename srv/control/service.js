@@ -9,15 +9,16 @@ module.exports = class ControlService extends cds.ApplicationService {
   init() {
     const { Disruptions } = this.entities
 
-    this.on('declareDisruption', async req => {
-      const { carrierId, connectionId, flightDate, reason } = req.data
-      const f = await abap.flight({ carrierId, connectionId, flightDate })
-      if (!f) return req.reject(404, `NO_FLIGHT: Flight ${carrierId} ${connectionId} ${flightDate} does not exist in the booking system.`)
-      const open = await SELECT.one.from('fr.Disruptions').where({ carrierId, connectionId, flightDate, status: 'Open' })
-      if (open) return req.reject(409, `ALREADY_OPEN: Flight ${carrierId} ${connectionId} ${flightDate} already has open disruption ${open.ID}.`)
-      const ID = cds.utils.uuid()
-      await INSERT.into('fr.Disruptions').entries({ ID, carrierId, connectionId, flightDate, airportFrom: f.AirportFrom, airportTo: f.AirportTo, reason })
-      return SELECT.one.from(Disruptions, ID)
+    const asCancellation = c => ({ carrierId: c.CarrierId, connectionId: c.ConnectionId, flightDate: abap.iso(c.FlightDate), reason: c.Reason, notifyStatus: c.NotifyStatus || null, notifyMessage: c.NotifyMessage || null })
+
+    this.on('cancelFlight', async req => {
+      try { return asCancellation(await abap.cancelFlight(req.data)) } catch (e) { return req.reject(e.status ?? e.code ?? 400, e.message) }
+    })
+
+    this.on('cancellation', async req => {
+      const c = await abap.cancellation(req.data)
+      if (!c) return req.reject(404, `NO_CANCELLATION: ${req.data.carrierId} ${req.data.connectionId} ${abap.iso(req.data.flightDate)} is not cancelled.`)
+      return asCancellation(c)
     })
 
     this.on('closeDisruption', async req => {
@@ -31,6 +32,7 @@ module.exports = class ControlService extends cds.ApplicationService {
     this.on('demoInfo', demoInfo)
     this.on('resetDemo', async () => {
       if (abap.connected()) demoFlight = await abap.resetDemo() // first: if ABAP refuses, the app keeps its state
+      else await abap.resetMockCancellations()
       await DELETE.from('fr.PlanItems')
       await DELETE.from('fr.Plans')
       await DELETE.from('fr.Disruptions')
