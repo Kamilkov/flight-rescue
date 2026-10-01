@@ -1,0 +1,29 @@
+managed implementation in class zbp_r_fr_flightcancel unique;
+strict ( 2 );
+
+define behavior for ZR_FR_FlightCancel alias Cancellation
+persistent table zfr_flightcancel
+with additional save
+lock master
+authorization master ( global )
+{
+  // Creating a cancellation cancels the flight. It is never changed or deleted. On save ABAP raises FlightCancelled,
+  // and ZCL_FR_FLIGHTCANCEL_EVENTS reports it to the Flight Rescue app; the handler records the outcome in Notify*.
+  create ( precheck );
+  field ( readonly : update ) CarrierId, ConnectionId, FlightDate;
+  field ( readonly ) CreatedBy, CreatedAt, NotifyStatus, NotifyMessage;
+
+  event FlightCancelled;
+
+  mapping for zfr_flightcancel
+    {
+      CarrierId     = carrier_id;
+      ConnectionId  = connection_id;
+      FlightDate    = flight_date;
+      Reason        = reason;
+      CreatedBy     = created_by;
+      CreatedAt     = created_at;
+      NotifyStatus  = notify_status;
+      NotifyMessage = notify_message;
+    }
+}

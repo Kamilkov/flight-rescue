@@ -8,6 +8,9 @@ define view entity ZI_FR_Flight
     left outer join ZI_FR_FlightLoad as Load       on  Load.CarrierId    = Flight.carrier_id
                                                    and Load.ConnectionId = Flight.connection_id
                                                    and Load.FlightDate   = Flight.flight_date
+    left outer join zfr_flightcancel as Cancel     on  Cancel.carrier_id    = Flight.carrier_id
+                                                   and Cancel.connection_id = Flight.connection_id
+                                                   and Cancel.flight_date   = Flight.flight_date
 {
   key Flight.carrier_id                                                 as CarrierId,
   key Flight.connection_id                                              as ConnectionId,
@@ -22,5 +25,6 @@ define view entity ZI_FR_Flight
       Flight.plane_type_id                                              as PlaneType,
       Flight.seats_max                                                  as SeatsMax,
       cast( coalesce( Load.SeatsBooked, 0 ) as abap.int4 )              as SeatsBooked,
-      cast( Flight.seats_max - coalesce( Load.SeatsBooked, 0 ) as abap.int4 ) as SeatsFree
+      cast( Flight.seats_max - coalesce( Load.SeatsBooked, 0 ) as abap.int4 ) as SeatsFree,
+      cast( case when Cancel.carrier_id is not null then 'X' else ' ' end as abap_boolean preserving type ) as IsCancelled
 }

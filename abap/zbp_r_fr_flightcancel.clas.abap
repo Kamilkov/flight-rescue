@@ -1,0 +1,6 @@
+CLASS zbp_r_fr_flightcancel DEFINITION PUBLIC ABSTRACT FINAL FOR BEHAVIOR OF zr_fr_flightcancel.
+ENDCLASS.
+
+
+CLASS zbp_r_fr_flightcancel IMPLEMENTATION.
+ENDCLASS.

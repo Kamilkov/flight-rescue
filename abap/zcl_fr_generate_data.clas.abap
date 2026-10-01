@@ -1,7 +1,7 @@
 "! Copies the flight reference bookings (/DMO/BOOKING) into ZFR_BOOKING, so the rebooking
 "! service never writes to /DMO/ tables, and adds the demo scenario on FRA-EWR: a flight to
 "! cancel with 9 bookings and five alternatives with 6 free seats between them.
-"! Run it with F9 in ADT; running it again resets the data. The last output line names the demo flight.
+"! Run it with F9 in ADT; running it again resets the data and clears the flight cancellations. The last output line names the demo flight.
 CLASS zcl_fr_generate_data DEFINITION PUBLIC FINAL CREATE PUBLIC.
   PUBLIC SECTION.
     INTERFACES if_oo_adt_classrun.
@@ -59,7 +59,9 @@ CLASS zcl_fr_generate_data IMPLEMENTATION.
 
     DELETE FROM zfr_booking.
     INSERT zfr_booking FROM TABLE @bookings.
+    DELETE FROM zfr_flightcancel.
     out->write( |{ copied } bookings copied from /DMO/BOOKING into ZFR_BOOKING.| ).
+    out->write( 'Flight cancellations cleared (ZFR_FLIGHTCANCEL).' ).
     IF day IS INITIAL.
       out->write( 'No demo scenario: UA 0043 and LH 0402 do not fly three days in a row within a year.' ).
     ELSE.
