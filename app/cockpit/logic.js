@@ -104,11 +104,12 @@ sap.ui.define([], () => {
     return { text: 'Waiting for ABAP to report the cancellation (still queued in ABAP)…', failed: false }
   }
 
-  /** The open disruption the page works on: the newest (list is newest first), unless the current one's plan
-   *  waits for approval; a cancellation from elsewhere must not pull the plan away from the dispatcher. */
-  function pick(list, current) {
-    const still = current && list.find(d => d.ID === current.ID)
-    return still?.agentStatus === 'AwaitingApproval' ? still : list[0] ?? null
+  /** The open disruption the page works on (list is newest first): the one the dispatcher chose in the list; else the
+   *  current one while its plan waits on the page (`reviewing`), so a cancellation from elsewhere does not pull the
+   *  plan away; else the newest. A closed disruption is no longer listed and no longer counts. */
+  function pick(list, current, reviewing, chosen) {
+    const find = id => (id && list.find(d => d.ID === id)) || null
+    return find(chosen) ?? (reviewing ? find(current?.ID) : null) ?? list[0] ?? null
   }
 
   return { flightLabel, note, dots, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick }

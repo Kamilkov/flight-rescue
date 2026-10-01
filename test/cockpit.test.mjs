@@ -191,12 +191,14 @@ describe('cockpit logic', () => {
       { text: 'ABAP could not reach this app: CAP answered 401 Unauthorized', failed: true })
   })
 
-  test('a new disruption takes over the page, except from a plan that waits for approval', () => {
-    const waitingOne = { ID: 'a', agentStatus: 'AwaitingApproval' }, doneOne = { ID: 'a', agentStatus: 'Done' }, newer = { ID: 'b', agentStatus: 'Working' }
-    assert.equal(logic.pick([newer, waitingOne], waitingOne).ID, 'a', 'the dispatcher keeps the plan they are reviewing')
-    assert.equal(logic.pick([newer, doneOne], doneOne).ID, 'b')
-    assert.equal(logic.pick([newer], waitingOne).ID, 'b', 'a closed disruption is no longer listed')
-    assert.equal(logic.pick([], waitingOne), null)
+  test('a new disruption takes over the page, except from a plan the dispatcher reviews or a disruption they chose', () => {
+    const current = { ID: 'a', agentStatus: 'AwaitingApproval' }, newer = { ID: 'b', agentStatus: 'Working' }
+    assert.equal(logic.pick([newer, current], current, true).ID, 'a', 'the dispatcher keeps the plan they are reviewing')
+    assert.equal(logic.pick([newer, current], current, false).ID, 'b', 'approved or rejected: the next disruption takes over, whatever agentStatus still says')
+    assert.equal(logic.pick([newer], current, true).ID, 'b', 'a closed disruption is no longer listed')
+    assert.equal(logic.pick([], current, true), null)
+    assert.equal(logic.pick([newer, current], null, false, 'a').ID, 'a', 'a disruption chosen in the list wins over the newest')
+    assert.equal(logic.pick([newer], null, false, 'a').ID, 'b', 'a chosen disruption that was closed no longer counts')
   })
 
   test('dots never exceed the seats, whatever the counts', () => {

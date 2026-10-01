@@ -67,6 +67,25 @@ describe('events from the booking system', () => {
     assert.equal((await SELECT.from('fr.Plans')).length, 1)
   })
 
+  test('while ABAP is slow to answer an event, other requests are not held up', async () => {
+    // The app has one SQLite connection: an event must not hold it while it waits for the booking system.
+    globalThis.FR_LLM = { idle: true }
+    const mock = cds.services.ZFR_REBOOK
+    let slowOn = true
+    const slow = req => { if (slowOn && req.query?.SELECT?.one) return new Promise(r => setTimeout(r, 1500)) }
+    mock.prepend(() => mock.before('READ', 'Flights', slow))
+    try {
+      const pending = event()
+      await new Promise(r => setTimeout(r, 300)) // the event is now waiting for ABAP's flight
+      const t = Date.now()
+      ok(await srv.get('/odata/v4/control/Disruptions', as('dispatcher')))
+      assert.ok(Date.now() - t < 700, `a dispatcher read waited ${Date.now() - t} ms for the event's ABAP call`)
+      await settled(ok(await pending).disruption)
+    } finally {
+      slowOn = false // handlers cannot be unregistered; this one steps aside for the following tests
+    }
+  })
+
   test('an unknown flight is refused', async () => {
     const r = await event({ ...LH400, flightDate: '2026-01-01' })
     assert.equal(r.status, 404)

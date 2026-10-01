@@ -30,7 +30,7 @@
         <Text text="{/waiting}" visible="{= !!${/waiting} }" class="sapUiTinyMarginTop"/>
         <Title text="Open disruptions" level="H3" class="sapUiSmallMarginTop"/>
         <List items="{/disruptions}" noDataText="No open disruption" showSeparators="None">
-          <CustomListItem>
+          <CustomListItem type="Active" press=".onSelect">
             <HBox class="frRow" renderType="Bare">
               <VBox>
                 <Text text="{label}"/>

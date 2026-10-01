@@ -51,11 +51,11 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       for (const [key, value] of Object.entries(conversation())) this.set(`/${key}`, value)
     },
 
-    // The page works on the newest open disruption, unless the current one's plan waits for approval.
+    // The page works on the disruption the dispatcher chose, else on the one whose plan waits here, else on the newest.
     async loadDisruptions() {
       const { value } = await control("Disruptions?$filter=status eq 'Open'&$orderby=createdAt desc")
       const list = value.map(d => ({ ...d, label: logic.flightLabel(d), route: `${d.airportFrom}–${d.airportTo}` }))
-      const current = this.get('/disruption'), next = logic.pick(list, current)
+      const current = this.get('/disruption'), next = logic.pick(list, current, !!this.get('/plan/waiting'), this.chosen)
       this.set('/disruptions', list)
       if (next?.ID !== current?.ID) this.clear()
       this.set('/disruption', next)
@@ -155,18 +155,31 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       this.run('agent', 'The agent is working', async () => this.answer(await agent.ask(text)))
     },
 
+    // A disruption chosen in the list: the page stays on it until its plan is decided or another one is chosen.
+    onSelect(event) {
+      const d = event.getSource().getBindingContext().getObject()
+      this.run('disruption', 'Opening the disruption', async () => {
+        this.chosen = d.ID
+        await this.loadDisruptions()
+        const v = logic.agentView(this.get('/disruption'), this.get('/loadedTask'))
+        if (v.load) { this.set('/loadedTask', v.load); await this.answer(await agent.task(v.load)) } else await this.refresh()
+      })
+    },
+
     onApprove() {
       const task = this.get('/task')
       this.run('agent', 'Moving bookings in the booking system', async () => {
         // The approval call returns when every booking was tried; meanwhile show each move as ABAP confirms it.
         const timer = setInterval(() => this.refresh(), 1000)
-        try { await this.answer(await agent.approve(task)) } finally { clearInterval(timer) }
+        try { await this.answer(await agent.approve(task)) } finally { clearInterval(timer); this.chosen = null }
       })
     },
 
     onReject() {
       const task = this.get('/task')
-      this.run('agent', 'Rejecting the plan', async () => this.answer(await agent.reject(task, 'Rejected by the dispatcher.')))
+      this.run('agent', 'Rejecting the plan', async () => {
+        try { await this.answer(await agent.reject(task, 'Rejected by the dispatcher.')) } finally { this.chosen = null }
+      })
     },
 
     onReset() {

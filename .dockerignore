@@ -5,3 +5,10 @@ node_modules
 docs
 test
 abap
+.env
+.env.*
+*.env
+default-env.json
+.cdsrc-private.json
+*.sqlite
+*.sqlite-*
