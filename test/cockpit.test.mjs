@@ -348,6 +348,15 @@ describe('cockpit logic', () => {
     assert.deepEqual(logic.replayView(null), { running: false, clock: '' })
   })
 
+  test('a replay without a usable route geometry still gives the card, with no route', () => {
+    // The server sends a JSON null geometry as the string 'null'.
+    for (const geo of [{ geometry: 'null' }, { geometry: null }, null]) {
+      const v = logic.replayView({ running: true, clock: '2026-10-20T08:10:00', samples: [], geo })
+      assert.equal(v.clockText, 'Tue 20 Oct · 08:10', JSON.stringify(geo))
+      assert.deepEqual(v.map.routes, [], JSON.stringify(geo))
+    }
+  })
+
   test('the map has what GeoMap needs before any replay: it throws on an undefined configuration or zoom level', () => {
     const { config, center, zoom } = logic.baseMap
     assert.ok(config.MapProvider.length && config.MapLayerStacks.length, 'GeoMap ignores a configuration without both')

@@ -65,9 +65,10 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       this.set('/disruption', next)
     },
 
-    // The jam card follows the replay on the server (started here or elsewhere).
+    // The jam card follows the replay on the server (started here or elsewhere). A failing read keeps the card as it was and
+    // shows in its pane; it never throws, so it cannot stop the rest of poll().
     async loadReplay() {
-      this.set('/replay', jam(await control('trafficReplay()')))
+      try { this.set('/replay', jam(await control('trafficReplay()'))) } catch (e) { this.set('/errors/disruption', e.message) }
     },
 
     // Reads the booking system's seats and the plan. Called after every action and once a second during an approval.

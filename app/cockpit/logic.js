@@ -164,7 +164,7 @@ sap.ui.define([], () => {
   function replayView(r) {
     if (!r?.clock) return { running: !!r?.running, clock: '' }
     const report = r.reports?.at(-1), point = p => `${p[0]};${p[1]};0`
-    const coordinates = r.geo?.geometry ? JSON.parse(r.geo.geometry).coordinates ?? [] : []
+    const coordinates = r.geo?.geometry ? JSON.parse(r.geo.geometry)?.coordinates ?? [] : []
     const what = report && (report.delayMin != null ? `+${report.delayMin} min` : String(report.trafficType ?? '').toLowerCase().replace(/_/g, ' '))
     return {
       running: !!r.running, clock: r.clock, label: r.label ?? '', clockText: clockText(r.clock), chart: chart(r),
