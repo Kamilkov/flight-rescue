@@ -226,4 +226,18 @@ async function apply(req, planID, agentTask) {
     message: `${rebooked} of ${items.length} booking(s) moved in the booking system.${failed.length ? ` ${failed.length} failed; see failed.` : ''}` }
 }
 
-module.exports = { impact, board, propose, apply, WINDOW_DAYS, JAM }
+/** Sends an approved traffic-jam plan's offers: the plan and its items become Offered. Nothing reaches ABAP. */
+async function sendOffers(req, planID, agentTask) {
+  const plan = await SELECT.one.from('fr.Plans').where({ ID: planID })
+  if (!plan) return req.reject(404, `NO_PLAN: Plan ${planID} does not exist.`)
+  if (!agentTask || plan.agentTask !== agentTask) return req.reject(409, 'NOT_REVIEWED: This plan was not proposed in this agent task.')
+  const d = await openDisruption(req, plan.disruption_ID)
+  if (d.kind !== 'TrafficJam') return req.reject(409, 'WRONG_KIND: A cancellation plan is applied with applyRebooking.')
+  const claimed = await UPDATE('fr.Plans').set({ status: 'Offered', appliedBy: req.user.id, appliedAt: new Date().toISOString() }).where({ ID: planID, status: 'Pending' })
+  if (claimed !== 1) return req.reject(409, `NOT_PENDING: Plan ${planID} is ${plan.status}, not Pending.`)
+  const offered = await UPDATE('fr.PlanItems').set({ status: 'Offered', message: 'Waiting for the passenger.' }).where({ plan_ID: planID })
+  return { plan: planID, status: 'Offered', offered,
+    message: `${offered} offer(s) sent. Nothing changed in the booking system: each passenger accepts or not.` }
+}
+
+module.exports = { impact, board, propose, apply, sendOffers, WINDOW_DAYS, JAM }

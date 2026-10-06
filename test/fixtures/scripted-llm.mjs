@@ -1,9 +1,10 @@
 // Test-only chat model, loaded through cds.requires.llm.impl: no network, no key. It plays the agent's
 // intended flow, step by step, from the tool results it is shown (set per test on globalThis.FR_LLM):
-//   { disruption?, assignments?, extra?, stopAfterPropose?, idle?, fail? }
+//   { disruption?, assignments?, extra?, stopAfterPropose?, finalTool?, idle?, fail? }
 // Without `disruption` it takes the ID from "disruption <uuid>" in the first user message (the server's prompt).
 // `idle`: answers with text and calls no tool. `fail`: throws, as a model without a key would.
-// disruptionImpact → proposeRebooking (greedy earliest-first unless `assignments` is given) → applyRebooking.
+// disruptionImpact → proposeRebooking (greedy earliest-first unless `assignments` is given) → applyRebooking, or
+// sendOffers when the impact is a TrafficJam's; `finalTool` names that last call instead.
 // It records the tool names it is given on globalThis.FR_LLM_TOOLS.
 import { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { AIMessage } from '@langchain/core/messages'
@@ -56,7 +57,8 @@ export default class ScriptedModel extends BaseChatModel {
     }
     if (last.name === 'proposeRebooking') {
       const plan = text.match(/\bplan: ([0-9a-f-]{36})/)?.[1]
-      if (plan && !script.stopAfterPropose) return call('applyRebooking', { plan })
+      const jam = /\bkind: TrafficJam\b/.test(String(tools.find(m => m.name === 'disruptionImpact')?.content ?? ''))
+      if (plan && !script.stopAfterPropose) return call(script.finalTool ?? (jam ? 'sendOffers' : 'applyRebooking'), { plan })
     }
     return done(`Scripted end. Last tool result: ${text.slice(0, 4000)}`)
   }

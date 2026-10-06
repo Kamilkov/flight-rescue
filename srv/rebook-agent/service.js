@@ -6,13 +6,13 @@ const rebook = require('../lib/rebook')
 // without it. Each tool is wrapped so the task ID travels server-side in this store: never an argument,
 // so neither the caller nor the model can set it.
 const task = new AsyncLocalStorage()
-const TOOLS = ['query', 'describe', 'disruptionImpact', 'proposeRebooking', 'applyRebooking']
-const OPERATIONS = ['disruptionImpact', 'proposeRebooking', 'applyRebooking']
+const TOOLS = ['query', 'describe', 'disruptionImpact', 'proposeRebooking', 'applyRebooking', 'sendOffers']
+const OPERATIONS = ['disruptionImpact', 'proposeRebooking', 'applyRebooking', 'sendOffers']
 
 function assertStartup(srv) {
   const ops = Object.keys(srv.operations ?? srv.actions).sort()
   if (JSON.stringify(ops) !== JSON.stringify([...OPERATIONS].sort())) throw new Error(`RebookAgentService operations ${ops} differ from the allowlist`)
-  if (!srv.actions.applyRebooking['@agent.hitl']) throw new Error('applyRebooking must be annotated @agent.hitl')
+  for (const a of ['applyRebooking', 'sendOffers']) if (!srv.actions[a]['@agent.hitl']) throw new Error(`${a} must be annotated @agent.hitl`)
 }
 
 module.exports = class RebookAgentService extends cds.ApplicationService {
@@ -34,6 +34,7 @@ module.exports = class RebookAgentService extends cds.ApplicationService {
     this.on('disruptionImpact', req => rebook.impact(req, req.data.disruption))
     this.on('proposeRebooking', req => rebook.propose(req, req.data, task.getStore() ?? null))
     this.on('applyRebooking', req => rebook.apply(req, req.data.plan, task.getStore()))
+    this.on('sendOffers', req => rebook.sendOffers(req, req.data.plan, task.getStore()))
     return super.init()
   }
 }

@@ -151,3 +151,78 @@ describe('seat board of a traffic jam', () => {
       ['LH', '0400', true, false, 4, 0, 9], ['DL', '0107', false, false, 0, 0, 2], ['LH', '0404', false, false, 0, 0, 3]])
   })
 })
+
+describe('the agent and a traffic jam', () => {
+  test('it offers later flights and pauses at sendOffers; approval sends the offers without touching ABAP', async () => {
+    const ID = await jam(), before = await bookings()
+    const t = await ask(ID)
+    assert.equal(paused(t).name, 'sendOffers')
+    const [plan] = await SELECT.from('fr.Plans').where({ disruption_ID: ID })
+    assert.equal(plan.status, 'Pending')
+    const done = await approve(t)
+    assert.equal(done.status.state, 'completed', JSON.stringify(done.status))
+    assert.deepEqual(Object.values(await SELECT.one.from('fr.Plans', plan.ID).columns('status', 'appliedBy')), ['Offered', 'dispatcher'])
+    const items = await SELECT.from('fr.PlanItems').columns('travelId', 'bookingId', 'toConnectionId', 'status').where({ plan_ID: plan.ID }).orderBy('travelId', 'bookingId')
+    assert.deepEqual(items.map(i => `${i.travelId}/${i.bookingId}→${i.toConnectionId} ${i.status}`),
+      ['90000101/0001→0107 Offered', '90000101/0002→0107 Offered', '90000102/0001→0404 Offered', '90000102/0002→0404 Offered'])
+    assert.deepEqual(await bookings(), before, 'offers change nothing in ABAP')
+    assert.deepEqual(globalThis.FR_LLM_TOOLS.at(-1), ['query', 'describe', 'disruptionImpact', 'proposeRebooking', 'applyRebooking', 'sendOffers'])
+  })
+
+  test('the seat board holds the offered seats', async () => {
+    const ID = await jam(), t = await ask(ID)
+    paused(t)
+    await approve(t)
+    const row = f => [f.carrierId, f.connectionId, f.highlighted, f.held]
+    assert.deepEqual(ok(await get(`flightBoard(disruption=${ID})`)).value.map(row), [['LH', '0400', 4, 0], ['DL', '0107', 0, 2], ['LH', '0404', 0, 2]])
+  })
+
+  test('offered seats are held against a cancellation on the same route', async () => {
+    const t = await ask(await jam())
+    paused(t)
+    await approve(t)
+    globalThis.FR_LLM = { idle: true }
+    ok(await control('cancelFlight', { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-20', reason: 'Crew' }))
+    const c = await until(async () => { const d = await SELECT.one.from('fr.Disruptions').where({ kind: 'Cancellation', flightDate: '2026-10-20' }); return d?.agentStatus && d.agentStatus !== 'Working' && d })
+    const impact = await agentTool('disruptionImpact', { disruption: c.ID })
+    assert.deepEqual(impact.alternatives.map(a => [a.carrierId, a.connectionId, a.flightDate, a.seatsAvailable]), [['LH', '0404', '2026-10-20', 1]],
+      'DL 0107: 2 free, 2 offered; LH 0404: 3 free, 2 offered')
+  })
+
+  test('applyRebooking on a jam plan is refused and changes nothing', async () => {
+    const ID = await jam(), before = await bookings()
+    globalThis.FR_LLM = { finalTool: 'applyRebooking' }
+    const t = await ask(ID)
+    assert.equal(paused(t).name, 'applyRebooking')
+    const done = await approve(t)
+    assert.match(lastText(done), /WRONG_KIND: Offers are sent with sendOffers\./)
+    assert.equal((await SELECT.one.from('fr.Plans').where({ disruption_ID: ID })).status, 'Pending')
+    assert.deepEqual(await bookings(), before)
+  })
+
+  test('sendOffers on a cancellation plan is refused and changes nothing', async () => {
+    globalThis.FR_LLM = { idle: true }
+    ok(await control('cancelFlight', { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12', reason: 'Crew' }))
+    const c = await until(async () => { const d = await SELECT.one.from('fr.Disruptions').where({ kind: 'Cancellation' }); return d?.agentStatus && d.agentStatus !== 'Working' && d })
+    const before = await bookings()
+    globalThis.FR_LLM = { disruption: c.ID, finalTool: 'sendOffers' }
+    const t = await ask(c.ID)
+    assert.equal(paused(t).name, 'sendOffers')
+    assert.match(lastText(await approve(t)), /WRONG_KIND: A cancellation plan is applied with applyRebooking\./)
+    assert.deepEqual(await bookings(), before)
+  })
+
+  test('sendOffers outside the task that proposed the plan is refused', async () => {
+    const ID = await jam()
+    const r = await agentTool('proposeRebooking', { disruption: ID, rationale: 'test', assignments: [{ travelId: '90000101', bookingId: '0001', carrierId: 'DL', connectionId: '0107', flightDate: '2026-10-20' }] })
+    await assert.rejects(agentTool('sendOffers', { plan: r.plan }), /NOT_REVIEWED/)
+  })
+
+  test('the server\'s kickoff message names the jam and the delay', () => {
+    const { prompt } = require('../srv/lib/agent-start.js')
+    assert.equal(prompt({ kind: 'TrafficJam', airportFrom: 'FRA', ID: 'd-1', reason: 'A3 jam', delayMinutes: 25 }),
+      'Traffic jam at FRA (disruption d-1): A3 jam, about 25 min. Offer the passengers at risk a later flight.')
+    assert.equal(prompt({ carrierId: 'LH', connectionId: '0402', flightDate: '2026-10-14', ID: 'd-2' }),
+      'LH 0402 on 2026-10-14 was cancelled in the booking system (disruption d-2). Rebook the passengers.')
+  })
+})

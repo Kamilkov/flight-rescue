@@ -108,7 +108,7 @@ describe('agent: pause, approve, reject', () => {
     assert.deepEqual([free['UA 0941 2026-10-12'], free['LH 0400 2026-10-13'], free['LH 0400 2026-10-14'], free['LH 0400 2026-10-12']],
       [0, 0, 0, was['LH 0400 2026-10-12'] + 6])
     assert.equal((await approve(t)).data.error?.code, -32600, 'a completed task cannot be resumed')
-    assert.deepEqual(globalThis.FR_LLM_TOOLS.at(-1), ['query', 'describe', 'disruptionImpact', 'proposeRebooking', 'applyRebooking'], 'effective tool list')
+    assert.deepEqual(globalThis.FR_LLM_TOOLS.at(-1), ['query', 'describe', 'disruptionImpact', 'proposeRebooking', 'applyRebooking', 'sendOffers'], 'effective tool list')
   })
 
   test('reject: ABAP and the plan stay unchanged', async () => {

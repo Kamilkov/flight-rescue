@@ -1,7 +1,7 @@
 const cds = require('@sap/cds')
 const LOG = cds.log('agent-start')
 
-// Starts the rebooking agent for a disruption the booking system reported. An agent task belongs to the user who
+// Starts the rebooking agent for a disruption the booking system reported or the traffic replay opened. An agent task belongs to the user who
 // starts it (@cap-js/agents filters tasks, checkpoints and resumes by createdBy), so it is started as the
 // dispatcher on duty: the cockpit, signed in as that user, loads the paused task and approves it.
 // It goes through the app's own A2A endpoint, the plugin's documented interface.
@@ -10,7 +10,9 @@ const STATES = { 'input-required': 'AwaitingApproval', completed: 'Done' }
 let base = null
 cds.on('listening', ({ url }) => { base = url })
 
-const prompt = d => `${d.carrierId} ${d.connectionId} on ${String(d.flightDate).slice(0, 10)} was cancelled in the booking system (disruption ${d.ID}). Rebook the passengers.`
+const prompt = d => d.kind === 'TrafficJam'
+  ? `Traffic jam at ${d.airportFrom} (disruption ${d.ID}): ${d.reason}, about ${d.delayMinutes} min. Offer the passengers at risk a later flight.`
+  : `${d.carrierId} ${d.connectionId} on ${String(d.flightDate).slice(0, 10)} was cancelled in the booking system (disruption ${d.ID}). Rebook the passengers.`
 
 async function run(ID) {
   if (!base) throw new Error('The server URL is not known yet.')

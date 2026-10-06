@@ -75,6 +75,14 @@ type ApplyResult {
   message  : String;
 }
 
+/** What sending a traffic jam's offers did: the plan and its items are Offered; nothing changed in ABAP. */
+type OfferResult {
+  plan    : UUID;
+  status  : String;
+  offered : Integer;
+  message : String;
+}
+
 /** One flight of a disruption's route and window, for the cockpit's fill map. */
 type FlightLoad {
   carrierId     : String(3);
