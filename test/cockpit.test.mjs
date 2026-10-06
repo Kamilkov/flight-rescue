@@ -452,7 +452,13 @@ describe('passenger page', () => {
     const html = (await srv.get('/passenger/index.html', as('passenger'))).data
     const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1]
     const els = {}, answers = [first], calls = []
-    const element = () => ({ hidden: false, disabled: false, dataset: {}, writes: 0, text: '', get textContent() { return this.text }, set textContent(v) { this.text = v; this.writes++ }, addEventListener(event, fn) { this.click = fn } })
+    // Server text must reach the page as text: writing markup (innerHTML) throws and fails the test.
+    const element = () => ({
+      hidden: false, disabled: false, dataset: {}, writes: 0, text: '',
+      get textContent() { return this.text }, set textContent(v) { this.text = v; this.writes++ },
+      set innerHTML(v) { throw new Error('markup written to the page') },
+      addEventListener(event, fn) { this.click = fn }
+    })
     const document = { getElementById: id => els[id] ??= element() }
     const fetch = async (url, init) => {
       calls.push(`${init?.method ?? 'GET'} ${url}`)
@@ -482,18 +488,36 @@ describe('passenger page', () => {
     assert.deepEqual([p.els.card.dataset.kind, p.els.error.hidden], ['done', true], 'a new card does not keep an error about the old one')
   })
 
-  test('the card is a live region: a poll that finds nothing new writes nothing; a failed poll shows once and clears with the next good one', async () => {
+  test('an Accept that goes through: the card says rebooked, the button is gone and usable again, no error', async () => {
     const p = await phone(reply(o('Offered')))
+    await p.accept(reply(o('Rebooked')))
+    assert.deepEqual([p.els.card.dataset.kind, p.els.title.text, p.els.accept.hidden, p.els.accept.disabled, p.els.error.hidden],
+      ['done', 'You are rebooked', true, false, true])
+  })
+
+  test('an Accept that goes through clears the message of an earlier one that failed', async () => {
+    const p = await phone(reply(o('Offered')))
+    await p.accept({ status: 502 }) // no JSON body: the page words it itself
+    assert.deepEqual([p.els.error.hidden, p.els.error.text, p.els.accept.disabled], [false, 'The server answered 502.', false], 'a failed Accept can be tried again')
+    await p.accept(reply(o('Rebooked')))
+    assert.deepEqual([p.els.card.dataset.kind, p.els.error.hidden], ['done', true])
+  })
+
+  test('server text is drawn as text; the card is a live region: a poll that finds nothing new writes nothing; a failed poll shows once and clears with the next good one', async () => {
+    const jam = o('Offered', { reason: '<b>A3</b> & "x"' }) // markup characters in what the server sends
+    const p = await phone(reply(jam))
+    assert.deepEqual([p.els.title.text, p.els.text.text],
+      ['Traffic jam on your way to the airport', '<b>A3</b> & "x". You may miss LH 0400 at 10:55. Switch to LH 0404 at 17:15, free of charge?'], 'verbatim, markup characters and all')
     const writes = () => ['title', 'text', 'error'].map(id => p.els[id].writes)
     const before = writes()
-    await p.poll(reply(o('Offered')))
+    await p.poll(reply(jam))
     assert.deepEqual(writes(), before)
     await p.poll(new Error('Failed to fetch'))
     assert.deepEqual([p.els.error.hidden, p.els.error.text], [false, 'Failed to fetch'])
     const once = p.els.error.writes
     await p.poll(new Error('Failed to fetch'))
     assert.equal(p.els.error.writes, once, 'the same failure is not written, and so not read out, again')
-    await p.poll(reply(o('Offered')))
+    await p.poll(reply(jam))
     assert.equal(p.els.error.hidden, true)
   })
 })

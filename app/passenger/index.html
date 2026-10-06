@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Flight rescue · your trip</title>
   <style>
-    :root { color-scheme: light dark; --accent: #0a6ed1; --error: #bb0000; --ok: #107e3e; --warn: #e9730c; --muted: #6a6d70; }
+    :root { color-scheme: light dark; --accent: #0a6ed1; --error: #bb0000; --ok: #107e3e; --warn: #e9730c; --muted: color-mix(in srgb, CanvasText 60%, Canvas); }
     @media (prefers-color-scheme: dark) { :root { --error: #ff6b6b; } } /* the light red is 2.8:1 on the dark page, this one 6.8:1 */
     * { box-sizing: border-box; }
     body { margin: 0; font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: Canvas; color: CanvasText; }
@@ -69,7 +69,7 @@
     async function load() { try { show(await passenger('myOffer()')) } catch (e) { shown = ''; problem(e) } }
     $('accept').addEventListener('click', async () => {
       $('accept').disabled = true
-      try { show(await passenger('acceptOffer', {})); problem(null) } catch (e) { problem(e) } finally { $('accept').disabled = false }
+      try { show(await passenger('acceptOffer', {})) } catch (e) { problem(e) } finally { $('accept').disabled = false }
     })
     load()
     setInterval(load, 2000)
