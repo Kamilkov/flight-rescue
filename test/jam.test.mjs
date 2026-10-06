@@ -76,3 +76,64 @@ describe('traffic scenario data', () => {
     assert.equal((await SELECT.one.from('fr.Disruptions', ID)).kind, 'Cancellation')
   })
 })
+
+describe('impact of a traffic jam', () => {
+  test('at risk: drivers via the jammed approach on flights 60–180 min after it; offers: later flights that day with seats', async () => {
+    const ID = await jam()
+    const impact = await agentTool('disruptionImpact', { disruption: ID })
+    assert.deepEqual([impact.disruption.kind, impact.disruption.flight, impact.disruption.jamTime], ['TrafficJam', null, '08:10:00'])
+    assert.deepEqual(impact.affectedBookings.map(b => `${b.travelId}/${b.bookingId} ${b.carrierId} ${b.connectionId} ${b.flightDate}`), [
+      '90000101/0001 LH 0400 2026-10-20', '90000101/0002 LH 0400 2026-10-20', '90000102/0001 LH 0400 2026-10-20', '90000102/0002 LH 0400 2026-10-20'])
+    assert.deepEqual(impact.alternatives.map(a => [a.carrierId, a.connectionId, a.departureTime, a.seatsAvailable, a.forFlight]),
+      [['DL', '0107', '11:50:00', 2, 'LH 0400 2026-10-20'], ['LH', '0404', '17:15:00', 3, 'LH 0400 2026-10-20']])
+    assert.equal(impact.note, '9 bookings with passenger context on LH 0400 2026-10-20: 4 at risk (driving via wiesbaden), 1 driving via another approach, 2 by train, 2 checked in. Enough seats to offer all 4 bookings at risk a later flight.')
+  })
+
+  test('the jammed approach decides who is at risk', async () => {
+    const impact = await agentTool('disruptionImpact', { disruption: await jam({ approach: 'darmstadt', road: 'A5' }) })
+    assert.deepEqual(impact.affectedBookings.map(b => `${b.travelId}/${b.bookingId}`), ['90000103/0001'])
+  })
+
+  test('a flight leaving less than 60 or more than 180 min after the jam is not affected', async () => {
+    for (const jamTime of ['09:20:00', '07:00:00']) {
+      const impact = await agentTool('disruptionImpact', { disruption: await jam({ jamTime }) })
+      assert.deepEqual([impact.affectedBookings.length, impact.alternatives.length], [0, 0], jamTime)
+      assert.match(impact.note, /^Nobody is at risk/)
+    }
+  })
+
+  test('the impact of a closed jam is refused', async () => {
+    const ID = await jam({ status: 'Closed' })
+    await assert.rejects(agentTool('disruptionImpact', { disruption: ID }), /CLOSED/)
+  })
+})
+
+describe('proposals for a traffic jam', () => {
+  const offer = (travelId, bookingId, carrierId, connectionId) => ({ travelId, bookingId, carrierId, connectionId, flightDate: '2026-10-20' })
+
+  test('a plan offers at-risk bookings listed later flights; its items move from the booking\'s own flight', async () => {
+    const ID = await jam()
+    const r = await agentTool('proposeRebooking', { disruption: ID, rationale: 'test', assignments: [offer('90000101', '0001', 'DL', '0107'), offer('90000102', '0001', 'LH', '0404')] })
+    assert.deepEqual([r.status, r.assigned, r.unassigned.length], ['Pending', 2, 2])
+    const items = await SELECT.from('fr.PlanItems').columns('travelId', 'fromConnectionId', 'fromFlightDate', 'toConnectionId', 'status').where({ plan_ID: r.plan }).orderBy('travelId')
+    assert.deepEqual(items.map(i => `${i.travelId} ${i.fromConnectionId} ${i.fromFlightDate} → ${i.toConnectionId} ${i.status}`),
+      ['90000101 0400 2026-10-20 → 0107 Planned', '90000102 0400 2026-10-20 → 0404 Planned'])
+  })
+
+  test('refused: a passenger not at risk, a flight not listed for that booking, more than the seats', async () => {
+    const ID = await jam()
+    const propose = assignments => agentTool('proposeRebooking', { disruption: ID, rationale: 'test', assignments })
+    await assert.rejects(propose([offer('90000104', '0001', 'DL', '0107')]), /NOT_AFFECTED/, 'by train')
+    await assert.rejects(propose([{ ...offer('90000101', '0001', 'UA', '0941'), flightDate: '2026-10-12' }]), /NOT_LISTED/)
+    await assert.rejects(propose([offer('90000101', '0001', 'DL', '0107'), offer('90000101', '0002', 'DL', '0107'), offer('90000102', '0001', 'DL', '0107')]), /OVER_CAPACITY/)
+  })
+})
+
+describe('seat board of a traffic jam', () => {
+  test('the flight in the jam with its passengers at risk, then the later flights that day', async () => {
+    const ID = await jam()
+    const row = f => [f.carrierId, f.connectionId, f.affected, f.cancelled, f.highlighted, f.held, f.seatsFree]
+    assert.deepEqual(ok(await get(`flightBoard(disruption=${ID})`)).value.map(row), [
+      ['LH', '0400', true, false, 4, 0, 9], ['DL', '0107', false, false, 0, 0, 2], ['LH', '0404', false, false, 0, 0, 3]])
+  })
+})

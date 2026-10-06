@@ -16,6 +16,7 @@ type BookingRef {
 type Impact {
   disruption       : {
     ID           : UUID;
+    kind         : String(12);
     flight       : String;
     carrierId    : String(3);
     connectionId : String(4);
@@ -23,8 +24,20 @@ type Impact {
     airportFrom  : String(3);
     airportTo    : String(3);
     reason       : String;
+    jamDate      : Date;
+    jamTime      : Time;
+    road         : String(10);
+    delayMinutes : Integer;
   };
-  affectedBookings : many BookingRef;
+  /** Each affected booking with its own flight: the cancelled flight, or for a jam the flight it may miss. */
+  affectedBookings : many {
+    travelId     : String(8);
+    bookingId    : String(4);
+    carrierId    : String(3);
+    connectionId : String(4);
+    flightDate   : Date;
+  };
+  /** forFlight: the affected flight ("LH 0400 2026-10-20") this alternative is for. */
   alternatives     : many {
     carrierId      : String(3);
     connectionId   : String(4);
@@ -35,6 +48,7 @@ type Impact {
     seatsFree      : Integer;
     seatsHeld      : Integer;
     seatsAvailable : Integer;
+    forFlight      : String;
   };
   seatsAvailable   : Integer;
   note             : String;
@@ -72,7 +86,9 @@ type FlightLoad {
   seatsBooked   : Integer;
   seatsFree     : Integer;
   cancelled     : Boolean; // the disrupted flight
-  highlighted   : Integer; // cancelled flight: active bookings still on it; others: bookings this disruption's plans moved here
+  affected      : Boolean; // a traffic jam's flight, which its passengers at risk may miss
+  held          : Integer; // offered seats not answered yet
+  highlighted   : Integer; // cancelled flight: active bookings still on it; jam's flight: bookings at risk; others: bookings moved here
 }
 
 /** Which booking system the app talks to, the flight the cancellation demo is built around, and the traffic scenario's flight. */
