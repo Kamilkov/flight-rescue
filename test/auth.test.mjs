@@ -6,7 +6,7 @@ import { test } from 'node:test'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 delete process.env.ABAP_URL
-Object.assign(process.env, { DISPATCHER_PASSWORD: 'd-secret', ABAP_EVENTS_PASSWORD: 'e-secret' })
+Object.assign(process.env, { DISPATCHER_PASSWORD: 'd-secret', ABAP_EVENTS_PASSWORD: 'e-secret', PASSENGER_PASSWORD: 'p-secret' })
 const { default: cds } = await import('@sap/cds')
 const srv = cds.test(root, '--with-mocks')
 
@@ -19,4 +19,8 @@ test('with passwords set, the mocked users need them', async () => {
   assert.equal(await disruptions('dispatcher', 'd-secret'), 200)
   assert.equal(await disruptions('abap-events', 'e-secret'), 403, 'the event user has no dispatcher role')
   assert.equal(await disruptions('viewer', ''), 403)
+  const offer = (u, p) => srv.get('/odata/v4/passenger/myOffer()', as(u, p)).then(r => r.status)
+  assert.equal(await offer('passenger', ''), 401)
+  assert.equal(await offer('passenger', 'p-secret'), 200)
+  assert.equal(await disruptions('passenger', 'p-secret'), 403, 'the passenger has no dispatcher role')
 })

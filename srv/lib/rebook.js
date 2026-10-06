@@ -240,4 +240,36 @@ async function sendOffers(req, planID, agentTask) {
     message: `${offered} offer(s) sent. Nothing changed in the booking system: each passenger accepts or not.` }
 }
 
-module.exports = { impact, board, propose, apply, sendOffers, WINDOW_DAYS, JAM }
+/** The latest sent offer for a booking, with both flights' departure times; { status: null } when there is none. */
+async function offerOf(b) {
+  if (!b) return { status: null }
+  for (const p of await SELECT.from('fr.Plans').columns('ID', 'disruption_ID').where({ status: 'Offered' }).orderBy('createdAt desc')) {
+    const i = await SELECT.one.from('fr.PlanItems').where({ plan_ID: p.ID, travelId: b.travelId, bookingId: b.bookingId })
+    if (!i) continue
+    const current = { carrierId: i.fromCarrierId, connectionId: i.fromConnectionId, flightDate: abap.iso(i.fromFlightDate) }
+    const offered = { carrierId: i.toCarrierId, connectionId: i.toConnectionId, flightDate: abap.iso(i.toFlightDate) }
+    const [d, from, to] = await Promise.all([SELECT.one.from('fr.Disruptions', p.disruption_ID).columns('reason'), abap.flight(current), abap.flight(offered)])
+    return { item: i.ID, status: i.status, message: i.message, reason: d?.reason ?? null, travelId: i.travelId, bookingId: i.bookingId,
+      current: { ...current, departureTime: from?.DepartureTime ?? null }, offered: { ...offered, departureTime: to?.DepartureTime ?? null } }
+  }
+  return { status: null }
+}
+
+/** A passenger accepts an offer: ABAP moves that one booking. The claim makes a second answer NOT_OFFERED. */
+async function accept(req, itemID) {
+  const i = await SELECT.one.from('fr.PlanItems').where({ ID: itemID })
+  if (!i) return req.reject(404, 'NO_OFFER: There is no offer to accept.')
+  const plan = await SELECT.one.from('fr.Plans').columns('disruption_ID').where({ ID: i.plan_ID })
+  await openDisruption(req, plan.disruption_ID)
+  const claimed = await UPDATE('fr.PlanItems').set({ status: 'Accepting' }).where({ ID: itemID, status: 'Offered' })
+  if (claimed !== 1) return req.reject(409, `NOT_OFFERED: This offer is ${i.status}, not open.`)
+  let status = 'Rebooked', message = `Moved to ${flightName({ carrierId: i.toCarrierId, connectionId: i.toConnectionId, flightDate: i.toFlightDate })}.`
+  try {
+    await abap.rebook({ TravelId: i.travelId, BookingId: i.bookingId },
+      { CarrierId: i.fromCarrierId, ConnectionId: i.fromConnectionId, FlightDate: i.fromFlightDate },
+      { CarrierId: i.toCarrierId, ConnectionId: i.toConnectionId, FlightDate: i.toFlightDate })
+  } catch (e) { status = 'Failed'; message = e.message }
+  await UPDATE('fr.PlanItems', itemID).with({ status, message })
+}
+
+module.exports = { impact, board, propose, apply, sendOffers, offerOf, accept, WINDOW_DAYS, JAM }

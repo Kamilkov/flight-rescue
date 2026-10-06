@@ -18,7 +18,7 @@ if (ABAP_URL) {
 // Passwords for the mocked users come from the environment where one is set (the VPS); locally they stay empty.
 // ponytail: mocked auth with passwords suits a private demo container; a real deployment uses XSUAA or IAS.
 const users = cds.env.requires.auth?.users ?? {}
-for (const [id, variable] of [['dispatcher', 'DISPATCHER_PASSWORD'], ['abap-events', 'ABAP_EVENTS_PASSWORD']])
+for (const [id, variable] of [['dispatcher', 'DISPATCHER_PASSWORD'], ['abap-events', 'ABAP_EVENTS_PASSWORD'], ['passenger', 'PASSENGER_PASSWORD']])
   if (process.env[variable] && users[id]) users[id].password = process.env[variable]
 
 // The agent's A2A endpoint answers 401 without a Basic challenge, so a browser never sends it the login it already

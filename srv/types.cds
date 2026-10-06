@@ -167,3 +167,25 @@ type TrafficReplay {
   };
   note       : String;
 }
+
+/** A passenger's offer after a traffic jam. status: Offered, Accepting, Rebooked or Failed; null when there is none. */
+type Offer {
+  item      : UUID;
+  status    : String(10);
+  message   : String(500);
+  reason    : String(200); // the jam
+  travelId  : String(8);
+  bookingId : String(4);
+  current   : {
+    carrierId     : String(3);
+    connectionId  : String(4);
+    flightDate    : Date;
+    departureTime : Time;
+  };
+  offered   : {
+    carrierId     : String(3);
+    connectionId  : String(4);
+    flightDate    : Date;
+    departureTime : Time;
+  };
+}
