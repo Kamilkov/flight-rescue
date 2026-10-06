@@ -49,6 +49,13 @@ async function sameRoute(f, days) {
   return rows.filter(r => !(r.CarrierId === f.carrierId && r.ConnectionId === f.connectionId && iso(r.FlightDate) === iso(f.flightDate)))
 }
 
+/** Every flight leaving `airport` on `date`, by departure time. */
+async function departures(airport, date) {
+  if (!/^[A-Z]{3}$/.test(String(airport))) throw cds.error(400, `INVALID: airport "${airport}" is not valid.`)
+  const { Flights } = (await api()).entities
+  return (await (await api()).run(SELECT.from(Flights).where({ AirportFrom: airport, FlightDate: iso(date) }).orderBy('DepartureTime'))).map(padded)
+}
+
 /** Moves one booking in ABAP. Resolves with the updated booking or rejects with ABAP's message. */
 async function rebook(booking, from, to) {
   check(booking, BOOKING, 'booking')
@@ -104,9 +111,10 @@ async function resetMockCancellations() {
 }
 
 const MOCK_DEMO = { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12' } // srv/external/data
+const MOCK_TRAFFIC = { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-20' } // srv/external/data: the traffic scenario
 const connected = () => !!cds.env.requires.ZFR_REBOOK?.credentials?.url
 
-/** Reseeds ZFR_BOOKING by running ZCL_FR_GENERATE_DATA. Resolves with the demo flight its last output line names. */
+/** Reseeds ZFR_BOOKING by running ZCL_FR_GENERATE_DATA. Resolves with the demo flight and the traffic scenario's flight its output names. */
 // ponytail: the ADT class-run endpoint is a developer API, so this works with a developer user on a trial system only.
 // With a communication user (BTP ABAP environment) the reset would have to be its own released service.
 async function resetDemo() {
@@ -123,9 +131,10 @@ async function resetDemo() {
     headers: { ...auth, accept: 'text/plain', 'x-csrf-token': token.headers.get('x-csrf-token') ?? '', cookie: token.headers.getSetCookie().map(c => c.split(';')[0]).join('; ') }
   })
   const text = await run.text()
-  const m = run.ok && text.match(/^DEMO_FLIGHT (\S+) (\d{4}) (\d{4}-\d{2}-\d{2})\s*$/m)
+  const line = name => run.ok && text.match(new RegExp(`^${name} (\\S+) (\\d{4}) (\\d{4}-\\d{2}-\\d{2})\\s*$`, 'm'))
+  const m = line('DEMO_FLIGHT'), t = line('TRAFFIC_FLIGHT')
   if (!m) throw failed(run.status, text)
-  return { carrierId: m[1], connectionId: m[2], flightDate: m[3] }
+  return { carrierId: m[1], connectionId: m[2], flightDate: m[3], trafficFlight: t ? { carrierId: t[1], connectionId: t[2], flightDate: t[3] } : null }
 }
 
-module.exports = { flight, bookingsOn, sameRoute, rebook, cancelFlight, cancellation, resetMockCancellations, iso, plusDays, padded, connected, resetDemo, MOCK_DEMO }
+module.exports = { flight, bookingsOn, sameRoute, departures, rebook, cancelFlight, cancellation, resetMockCancellations, iso, plusDays, padded, connected, resetDemo, MOCK_DEMO, MOCK_TRAFFIC }

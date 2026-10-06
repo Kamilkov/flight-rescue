@@ -140,6 +140,18 @@ describe('demo reset', () => {
     })
   })
 
+  test('resetDemo also returns the traffic scenario flight the generator names', async () => {
+    const text = '13144 bookings copied from /DMO/BOOKING into ZFR_BOOKING.\n1521 demo bookings added on FRA-EWR.\nDEMO_FLIGHT LH 0402 2026-10-20\n752 traffic bookings added on FRA-JFK.\nTRAFFIC_FLIGHT LH 0400 2026-10-20\n'
+    const traffic = { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-20' }
+    await connectedTo({ status: 200, text }, async () => {
+      assert.deepEqual(ok(await control('resetDemo')).trafficFlight, traffic)
+      assert.deepEqual(ok(await get('demoInfo()')).trafficFlight, traffic, 'remembered until the next reset')
+    })
+    await connectedTo({ status: 200, text: 'DEMO_FLIGHT LH 0402 2026-10-20\n' }, async () => {
+      assert.equal(ok(await control('resetDemo')).trafficFlight, null, 'an older generator names no traffic flight')
+    })
+  })
+
   test('when ADT refuses the run, resetDemo reports its answer and keeps the app state', async () => {
     await connectedTo({ status: 403, text: 'No authorization' }, async () => {
       const res = await control('resetDemo')

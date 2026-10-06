@@ -75,12 +75,17 @@ type FlightLoad {
   highlighted   : Integer; // cancelled flight: active bookings still on it; others: bookings this disruption's plans moved here
 }
 
-/** Which booking system the app talks to, and the flight the demo scenario is built around. */
+/** Which booking system the app talks to, the flight the cancellation demo is built around, and the traffic scenario's flight. */
 type DemoInfo {
-  backend      : String(4); // abap or mock
-  carrierId    : String(3);
-  connectionId : String(4);
-  flightDate   : Date;
+  backend       : String(4); // abap or mock
+  carrierId     : String(3);
+  connectionId  : String(4);
+  flightDate    : Date;
+  trafficFlight : {
+    carrierId    : String(3);
+    connectionId : String(4);
+    flightDate   : Date;
+  };
 }
 
 /** What the app answers ABAP for a cancelled flight. `duplicate`: the flight already had an open disruption. */

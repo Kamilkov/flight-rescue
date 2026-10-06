@@ -3,7 +3,7 @@ const abap = require('../lib/abap')
 const rebook = require('../lib/rebook')
 
 let demoFlight = null // what the last resetDemo seeded in ABAP; unknown after a restart
-const demoInfo = () => abap.connected() ? { backend: 'abap', ...demoFlight } : { backend: 'mock', ...abap.MOCK_DEMO }
+const demoInfo = () => abap.connected() ? { backend: 'abap', ...demoFlight } : { backend: 'mock', ...abap.MOCK_DEMO, trafficFlight: abap.MOCK_TRAFFIC }
 
 module.exports = class ControlService extends cds.ApplicationService {
   init() {

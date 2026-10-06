@@ -1,0 +1,10 @@
+travelId;bookingId;arrival;approach;phone
+90000101;0001;Car;wiesbaden;false
+90000101;0002;Car;wiesbaden;false
+90000102;0001;Car;wiesbaden;true
+90000102;0002;Car;wiesbaden;false
+90000103;0001;Car;darmstadt;false
+90000104;0001;Train;;false
+90000104;0002;Train;;false
+90000105;0001;CheckedIn;;false
+90000105;0002;CheckedIn;;false
