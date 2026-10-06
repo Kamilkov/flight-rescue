@@ -1,7 +1,9 @@
 "! Copies the flight reference bookings (/DMO/BOOKING) into ZFR_BOOKING, so the rebooking
-"! service never writes to /DMO/ tables, and adds the demo scenario on FRA-EWR: a flight to
-"! cancel with 9 bookings and five alternatives with 6 free seats between them.
-"! Run it with F9 in ADT; running it again resets the data and clears the flight cancellations. The last output line names the demo flight.
+"! service never writes to /DMO/ tables, and adds two demo scenarios: on FRA-EWR a flight to
+"! cancel with 9 bookings and five alternatives with 6 free seats between them; on FRA-JFK a flight
+"! in a traffic jam (LH 0400) with 9 bookings, and later flights that day with 2 and 3 free seats.
+"! Run it with F9 in ADT; running it again resets the data and clears the flight cancellations.
+"! The output names the demo flight (DEMO_FLIGHT) and the traffic scenario's flight (TRAFFIC_FLIGHT).
 CLASS zcl_fr_generate_data DEFINITION PUBLIC FINAL CREATE PUBLIC.
   PUBLIC SECTION.
     INTERFACES if_oo_adt_classrun.
@@ -11,9 +13,10 @@ CLASS zcl_fr_generate_data DEFINITION PUBLIC FINAL CREATE PUBLIC.
              carrier_id    TYPE /dmo/carrier_id,
              connection_id TYPE /dmo/connection_id,
              days_later    TYPE i,
-             free          TYPE i, " seats to leave free; -1 is the flight to cancel
+             free          TYPE i, " seats to leave free; -1 is the scenario's own flight
            END OF seat_plan.
     TYPES seat_plans TYPE STANDARD TABLE OF seat_plan WITH EMPTY KEY.
+    TYPES travel_sizes TYPE STANDARD TABLE OF i WITH EMPTY KEY.
 
     "! First day, two weeks out or later, from which UA 0043 and LH 0402 both fly three days in a row. Initial if none.
     METHODS demo_day RETURNING VALUE(result) TYPE d.
@@ -21,6 +24,13 @@ CLASS zcl_fr_generate_data DEFINITION PUBLIC FINAL CREATE PUBLIC.
     METHODS add_demo IMPORTING day TYPE d
                                now TYPE timestampl
                      CHANGING  bookings TYPE booking_table.
+    "! First day, two weeks out or later, on which LH 0400, DL 0107 and LH 0404 all fly. Initial if none.
+    METHODS traffic_day RETURNING VALUE(result) TYPE d.
+    "! Appends the traffic scenario: 9 bookings on LH 0400 in travels 90000101-105, and the later FRA-JFK flights
+    "! of that day filled to leave 2 (DL 0107), 3 (LH 0404) and 0 (DE 2016) free seats.
+    METHODS add_traffic IMPORTING day TYPE d
+                                  now TYPE timestampl
+                        CHANGING  bookings TYPE booking_table.
 ENDCLASS.
 
 
@@ -56,6 +66,11 @@ CLASS zcl_fr_generate_data IMPLEMENTATION.
     IF day IS NOT INITIAL.
       add_demo( EXPORTING day = day now = now CHANGING bookings = bookings ).
     ENDIF.
+    DATA(demo_added) = lines( bookings ) - copied.
+    DATA(traffic) = traffic_day( ).
+    IF traffic IS NOT INITIAL.
+      add_traffic( EXPORTING day = traffic now = now CHANGING bookings = bookings ).
+    ENDIF.
 
     DELETE FROM zfr_booking.
     INSERT zfr_booking FROM TABLE @bookings.
@@ -65,8 +80,14 @@ CLASS zcl_fr_generate_data IMPLEMENTATION.
     IF day IS INITIAL.
       out->write( 'No demo scenario: UA 0043 and LH 0402 do not fly three days in a row within a year.' ).
     ELSE.
-      out->write( |{ lines( bookings ) - copied } demo bookings added on FRA-EWR.| ).
+      out->write( |{ demo_added } demo bookings added on FRA-EWR.| ).
       out->write( |DEMO_FLIGHT LH 0402 { day DATE = ISO }| ).
+    ENDIF.
+    IF traffic IS INITIAL.
+      out->write( 'No traffic scenario: LH 0400, DL 0107 and LH 0404 do not fly on one day within a year.' ).
+    ELSE.
+      out->write( |{ lines( bookings ) - copied - demo_added } traffic bookings added on FRA-JFK.| ).
+      out->write( |TRAFFIC_FLIGHT LH 0400 { traffic DATE = ISO }| ).
     ENDIF.
   ENDMETHOD.
 
@@ -135,6 +156,64 @@ CLASS zcl_fr_generate_data IMPLEMENTATION.
                         last_changed_at       = now
                         local_last_changed_at = now ) TO bookings.
       ENDDO.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD traffic_day.
+    result = sy-datum + 14.
+    DO 365 TIMES.
+      SELECT COUNT(*) FROM /dmo/flight
+        WHERE ( ( carrier_id = 'LH' AND connection_id = '0400' ) OR ( carrier_id = 'DL' AND connection_id = '0107' )
+             OR ( carrier_id = 'LH' AND connection_id = '0404' ) )
+          AND flight_date = @result
+        INTO @DATA(flights).
+      IF flights = 3.
+        RETURN.
+      ENDIF.
+      result = result + 1.
+    ENDDO.
+    CLEAR result.
+  ENDMETHOD.
+
+  METHOD add_traffic.
+    DATA travel_id TYPE /dmo/travel_id.
+    DATA(plan) = VALUE seat_plans( ( carrier_id = 'LH' connection_id = '0400' free = -1 )
+                                   ( carrier_id = 'DL' connection_id = '0107' free = 2 )
+                                   ( carrier_id = 'LH' connection_id = '0404' free = 3 )
+                                   ( carrier_id = 'DE' connection_id = '2016' free = 0 ) ).
+    DATA(sizes) = VALUE travel_sizes( ( 2 ) ( 2 ) ( 1 ) ( 2 ) ( 2 ) ).
+
+    LOOP AT plan INTO DATA(p).
+      DATA(plan_index) = sy-tabix.
+      SELECT SINGLE seats_max, price, currency_code FROM /dmo/flight
+        WHERE carrier_id = @p-carrier_id AND connection_id = @p-connection_id AND flight_date = @day
+        INTO @DATA(flight).
+      IF sy-subrc <> 0.     " DE 2016 may not fly that day: nothing to fill
+        CONTINUE.
+      ENDIF.
+      IF p-free < 0.        " the flight in the jam: travels 90000101-105 with 2, 2, 1, 2 and 2 bookings
+        LOOP AT sizes INTO DATA(size).
+          travel_id = 90000100 + sy-tabix.
+          DO size TIMES.
+            APPEND VALUE #( travel_id = travel_id booking_id = sy-index customer_id = '000001'
+                            carrier_id = p-carrier_id connection_id = p-connection_id flight_date = day
+                            flight_price = flight-price currency_code = flight-currency_code booking_status = 'B'
+                            last_changed_at = now local_last_changed_at = now ) TO bookings.
+          ENDDO.
+        ENDLOOP.
+      ELSE.                 " a later flight: one filler travel leaves `free` seats
+        DATA(booked) = REDUCE i( INIT n = 0 FOR b IN bookings
+                                 WHERE ( carrier_id = p-carrier_id AND connection_id = p-connection_id
+                                         AND flight_date = day AND booking_status <> 'X' )
+                                 NEXT n = n + 1 ).
+        travel_id = 90000110 + plan_index.
+        DO flight-seats_max - booked - p-free TIMES.
+          APPEND VALUE #( travel_id = travel_id booking_id = sy-index customer_id = '000001'
+                          carrier_id = p-carrier_id connection_id = p-connection_id flight_date = day
+                          flight_price = flight-price currency_code = flight-currency_code booking_status = 'B'
+                          last_changed_at = now local_last_changed_at = now ) TO bookings.
+        ENDDO.
+      ENDIF.
     ENDLOOP.
   ENDMETHOD.
 
