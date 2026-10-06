@@ -20,12 +20,12 @@ async function openDisruption(req, ID) {
   return d
 }
 
-/** Seats promised elsewhere, by flight: pending plans of other disruptions, and every offer not answered yet. */
+/** Seats promised elsewhere, by flight: pending plans of other disruptions, and every offer not answered yet on an open disruption. */
 async function heldSeats(disruptionID) {
   const cols = ['toCarrierId', 'toConnectionId', 'toFlightDate', 'count(*) as seats'], by = ['toCarrierId', 'toConnectionId', 'toFlightDate']
   const rows = [
     ...await SELECT.from('fr.PlanItems').columns(...cols).where({ 'plan.status': 'Pending', 'plan.disruption_ID': { '!=': disruptionID } }).groupBy(...by),
-    ...await SELECT.from('fr.PlanItems').columns(...cols).where({ status: { in: ['Offered', 'Accepting'] } }).groupBy(...by)
+    ...await SELECT.from('fr.PlanItems').columns(...cols).where({ status: { in: ['Offered', 'Accepting'] }, 'plan.disruption.status': 'Open' }).groupBy(...by)
   ]
   const held = {}
   for (const h of rows) {

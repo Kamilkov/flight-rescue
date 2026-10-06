@@ -106,6 +106,17 @@ describe('impact of a traffic jam', () => {
     const ID = await jam({ status: 'Closed' })
     await assert.rejects(agentTool('disruptionImpact', { disruption: ID }), /CLOSED/)
   })
+
+  test('offers hold seats while their disruption is open; closing it frees them', async () => {
+    const A = await jam(), B = await jam()
+    const item = (travelId, bookingId) => ({ travelId, bookingId, fromCarrierId: 'LH', fromConnectionId: '0400', fromFlightDate: '2026-10-20',
+      toCarrierId: 'DL', toConnectionId: '0107', toFlightDate: '2026-10-20', status: 'Offered' })
+    await INSERT.into('fr.Plans').entries({ ID: randomUUID(), disruption_ID: A, status: 'Offered', items: [item('90000101', '0001'), item('90000101', '0002')] })
+    const listed = async () => (await agentTool('disruptionImpact', { disruption: B })).alternatives.map(a => [a.carrierId, a.connectionId, a.seatsAvailable])
+    assert.deepEqual(await listed(), [['LH', '0404', 3]], 'DL 0107: 2 free, 2 offered by A')
+    await UPDATE('fr.Disruptions', A).set({ status: 'Closed' })
+    assert.deepEqual(await listed(), [['DL', '0107', 2], ['LH', '0404', 3]], 'A is closed: its offers can no longer be answered')
+  })
 })
 
 describe('proposals for a traffic jam', () => {
