@@ -13,12 +13,16 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
     return data
   }
 
+  // The jam card's model. Its GeoMap throws on an undefined configuration or zoom level, so the map's base settings
+  // are in the model before any replay and after a reset, when replayView has no map.
+  const jam = r => ({ map: logic.baseMap, ...logic.replayView(r) })
+
   return Controller.extend('fr.cockpit.Main', {
     onInit() {
       this.model = new JSONModel({
         backend: '', busy: false, busyText: '', waiting: '', agentBusy: '', errors: { disruption: '', agent: '', board: '' },
         form: { carrierId: '', connectionId: '', flightDate: '', reason: 'Aircraft technical issue' },
-        disruptions: [], disruption: null, board: [], ...conversation()
+        disruptions: [], disruption: null, board: [], replay: jam(null), ...conversation()
       })
       this.getView().setModel(this.model)
       this.refresh = logic.serial(this.refresh.bind(this)) // the polls during an approval must not overlap
@@ -54,11 +58,16 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
     // The page works on the disruption the dispatcher chose, else on the one whose plan waits here, else on the newest.
     async loadDisruptions() {
       const { value } = await control("Disruptions?$filter=status eq 'Open'&$orderby=createdAt desc")
-      const list = value.map(d => ({ ...d, label: logic.flightLabel(d), route: `${d.airportFrom}–${d.airportTo}` }))
+      const list = value.map(d => ({ ...d, label: logic.disruptionLabel(d), route: logic.disruptionRoute(d) }))
       const current = this.get('/disruption'), next = logic.pick(list, current, !!this.get('/plan/waiting'), this.chosen)
       this.set('/disruptions', list)
       if (next?.ID !== current?.ID) this.clear()
       this.set('/disruption', next)
+    },
+
+    // The jam card follows the replay on the server (started here or elsewhere).
+    async loadReplay() {
+      this.set('/replay', jam(await control('trafficReplay()')))
     },
 
     // Reads the booking system's seats and the plan. Called after every action and once a second during an approval.
@@ -84,6 +93,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       if (this.get('/busy')) return // an approval runs; it refreshes the page itself
       try {
         await this.loadDisruptions()
+        await this.loadReplay()
         const d = this.get('/disruption'), e = this.expected
         if (e) {
           if (d && d.carrierId === e.carrierId && d.connectionId === e.connectionId && d.flightDate === e.flightDate) {
@@ -120,7 +130,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       this.set('/task', r.plan ? task : null)
       if (r.plan) {
         this.set('/planID', r.plan)
-        this.set('/affected', this.get('/board').find(f => f.cancelled)?.highlighted ?? 0)
+        this.set('/affected', this.get('/board').find(f => f.cancelled || f.affected)?.highlighted ?? 0)
       }
       if (r.failed) this.set('/errors/agent', r.text || `The agent stopped (${r.state}).`)
       else if (r.text) this.say('agent', r.text)
@@ -134,6 +144,12 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
         await control('cancelFlight', { ...f, reason: this.get('/form/reason') })
         this.expected = { ...f, since: Date.now() }
         this.set('/waiting', logic.waiting(null, 0).text)
+      })
+    },
+
+    onReplay() {
+      this.run('disruption', 'Starting the replay', async () => {
+        this.set('/replay', jam(await control('replayTraffic', {})))
       })
     },
 
@@ -168,7 +184,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
 
     onApprove() {
       const task = this.get('/task')
-      this.run('agent', 'Moving bookings in the booking system', async () => {
+      this.run('agent', this.get('/disruption')?.kind === 'TrafficJam' ? 'Sending the offers' : 'Moving bookings in the booking system', async () => {
         // The approval call returns when every booking was tried; meanwhile show each move as ABAP confirms it.
         const timer = setInterval(() => this.refresh(), 1000)
         try { await this.answer(await agent.approve(task)) } finally { clearInterval(timer); this.chosen = null }
@@ -189,6 +205,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
         this.expected = null
         this.set('/waiting', '')
         this.demo(info)
+        this.set('/replay', jam(null))
         await this.loadDisruptions()
         await this.refresh()
       })

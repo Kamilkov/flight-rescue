@@ -1,5 +1,5 @@
 <mvc:View controllerName="fr.cockpit.Main" height="100%"
-  xmlns="sap.m" xmlns:mvc="sap.ui.core.mvc" xmlns:core="sap.ui.core" xmlns:fr="fr.cockpit">
+  xmlns="sap.m" xmlns:mvc="sap.ui.core.mvc" xmlns:core="sap.ui.core" xmlns:fr="fr.cockpit" xmlns:vbm="sap.ui.vbm">
   <Page enableScrolling="false">
     <customHeader>
       <Bar>
@@ -27,6 +27,25 @@
         <Label text="Reason" labelFor="reason"/>
         <Input id="reason" value="{/form/reason}" maxLength="100"/>
         <Button text="Cancel flight in ABAP" type="Emphasized" press=".onCancel" enabled="{= !${/busy} }"/>
+        <Button text="Replay traffic incident" press=".onReplay" enabled="{= !${/busy} &amp;&amp; !${/replay/running} }"/>
+        <VBox class="frCard frJam" renderType="Bare" visible="{= !!${/replay/clock} }">
+          <Label text="{/replay/label}" wrapping="true"/>
+          <ObjectStatus text="{/replay/clockText}" icon="sap-icon://history"/>
+          <fr:TrafficChart chart="{/replay/chart}"/>
+          <ObjectStatus text="{/replay/report}" state="Warning" visible="{= !!${/replay/report} }"/>
+          <Text text="{/replay/note}" visible="{= !!${/replay/note} }"/>
+          <vbm:GeoMap width="100%" height="200px" mapConfiguration="{/replay/map/config}" refMapLayerStack="DEFAULT"
+            centerPosition="{/replay/map/center}" zoomlevel="{/replay/map/zoom}" legendVisible="false" scaleVisible="false">
+            <vbm:vos>
+              <vbm:Routes items="{path: '/replay/map/routes', templateShareable: false}">
+                <vbm:items><vbm:Route position="{position}" color="RGB(187,0,0)" linewidth="6"/></vbm:items>
+              </vbm:Routes>
+              <vbm:Spots items="{path: '/replay/map/spots', templateShareable: false}">
+                <vbm:items><vbm:Spot position="{position}" text="{label}" tooltip="{label}" type="{type}"/></vbm:items>
+              </vbm:Spots>
+            </vbm:vos>
+          </vbm:GeoMap>
+        </VBox>
         <Text text="{/waiting}" visible="{= !!${/waiting} }" class="sapUiTinyMarginTop"/>
         <Title text="Open disruptions" level="H3" class="sapUiSmallMarginTop"/>
         <List items="{/disruptions}" noDataText="No open disruption" showSeparators="None">
@@ -55,8 +74,9 @@
             <Title text="{/plan/title}" level="H4"/>
             <VBox items="{/plan/groups}" renderType="Bare">
               <HBox class="frRow" renderType="Bare">
-                <Text text="{= ${count} + (${count} === 1 ? ' booking' : ' bookings') + ' → ' + ${label} }"/>
-                <ObjectStatus text="{= ${rebooked} + ' moved' }" state="Success" visible="{= ${rebooked} > 0 }"/>
+                <Text text="{= ${count} + (${/disruption/kind} === 'TrafficJam' ? (${count} === 1 ? ' offer' : ' offers') : (${count} === 1 ? ' booking' : ' bookings')) + ' → ' + ${label} }"/>
+                <ObjectStatus text="{= ${rebooked} + (${/disruption/kind} === 'TrafficJam' ? ' accepted' : ' moved') }" state="Success" visible="{= ${rebooked} > 0 }"/>
+                <ObjectStatus text="{= ${waiting} + ' waiting for reply' }" state="Information" visible="{= ${waiting} > 0 }"/>
               </HBox>
             </VBox>
             <ObjectStatus text="{= ${/plan/unassigned} + ' unassigned' }" state="Warning" visible="{= ${/plan/unassigned} > 0 }"/>
@@ -65,7 +85,7 @@
             </VBox>
             <Label text="{/plan/rationale}" wrapping="true"/>
             <HBox visible="{= !!${/plan/waiting} }">
-              <Button text="Approve" type="Emphasized" press=".onApprove" enabled="{= !${/busy} }" class="sapUiTinyMarginEnd"/>
+              <Button text="{= ${/disruption/kind} === 'TrafficJam' ? 'Send offers' : 'Approve' }" type="Emphasized" press=".onApprove" enabled="{= !${/busy} }" class="sapUiTinyMarginEnd"/>
               <Button text="Reject" press=".onReject" enabled="{= !${/busy} }"/>
             </HBox>
           </VBox>
@@ -87,20 +107,21 @@
       <VBox class="frPane frPane3" renderType="Bare">
         <Title text="{= '3  Booking system' + (${/backend} === 'abap' ? ' (ABAP)' : ' (mock)') }"/>
         <MessageStrip text="{/errors/board}" type="Error" showIcon="true" visible="{= !!${/errors/board} }"/>
-        <Text text="Cancel a flight to see its route." visible="{= ${/board}.length === 0 }"/>
+        <Text text="Cancel a flight or replay a traffic incident to see its route." visible="{= ${/board}.length === 0 }"/>
         <VBox items="{/board}" renderType="Bare">
           <VBox renderType="Bare">
             <HBox class="frRow" renderType="Bare">
               <Text text="{label}"/>
-              <ObjectStatus text="{note}" state="{= ${cancelled} ? 'Error' : ${seatsFree} > 0 ? 'Success' : 'None' }"/>
+              <ObjectStatus text="{note}" state="{= ${cancelled} ? 'Error' : ${affected} ? 'Warning' : ${seatsFree} > 0 ? 'Success' : 'None' }"/>
             </HBox>
-            <fr:SeatMap seatsMax="{seatsMax}" seatsBooked="{seatsBooked}" highlighted="{highlighted}" cancelled="{cancelled}"/>
+            <fr:SeatMap seatsMax="{seatsMax}" seatsBooked="{seatsBooked}" highlighted="{highlighted}" held="{held}" cancelled="{cancelled}"/>
           </VBox>
         </VBox>
         <!-- The legend reuses the control: a one-seat map per dot kind. -->
         <HBox class="frLegend" renderType="Bare">
-          <fr:SeatMap seatsMax="1" seatsBooked="1" highlighted="1"/><Label text="affected or moved"/>
+          <fr:SeatMap seatsMax="1" seatsBooked="1" highlighted="1"/><Label text="affected, at risk or moved"/>
           <fr:SeatMap seatsMax="1" seatsBooked="1"/><Label text="booked"/>
+          <fr:SeatMap seatsMax="1" held="1"/><Label text="offered"/>
           <fr:SeatMap seatsMax="1"/><Label text="free"/>
         </HBox>
       </VBox>

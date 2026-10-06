@@ -1,4 +1,4 @@
-// One flight's cabin as dots: booked, highlighted (affected or moved passengers), free.
+// One flight's cabin as dots: booked, highlighted (affected or moved passengers), held (offered, not answered yet), free.
 // Counts only; there are no seat numbers in the data.
 sap.ui.define(['sap/ui/core/Control', './logic'], (Control, logic) => {
   'use strict'
@@ -8,19 +8,21 @@ sap.ui.define(['sap/ui/core/Control', './logic'], (Control, logic) => {
         seatsMax: { type: 'int', defaultValue: 0 },
         seatsBooked: { type: 'int', defaultValue: 0 },
         highlighted: { type: 'int', defaultValue: 0 },
+        held: { type: 'int', defaultValue: 0 },
         cancelled: { type: 'boolean', defaultValue: false }
       }
     },
     renderer: {
       apiVersion: 2,
       render(rm, control) {
-        const d = logic.dots({ seatsMax: control.getSeatsMax(), seatsBooked: control.getSeatsBooked(), highlighted: control.getHighlighted() })
+        const d = logic.dots({ seatsMax: control.getSeatsMax(), seatsBooked: control.getSeatsBooked(), highlighted: control.getHighlighted(), held: control.getHeld() })
         rm.openStart('div', control).class('frSeatMap')
         if (control.getCancelled()) rm.class('frSeatMapCancelled')
-        rm.attr('role', 'img').attr('aria-label', `${d.booked + d.highlighted} seats booked, ${d.highlighted} of them highlighted, ${d.free} free`).openEnd()
+        rm.attr('role', 'img').attr('aria-label', `${d.booked + d.highlighted} seats booked, ${d.highlighted} of them highlighted, ${d.held} offered, ${d.free} free`).openEnd()
         const seats = (n, css) => { for (let i = 0; i < n; i++) rm.openStart('i').class(css).openEnd().close('i') }
         seats(d.booked, 'frSeatBooked')
         seats(d.highlighted, 'frSeatHot')
+        seats(d.held, 'frSeatHeld')
         seats(d.free, 'frSeatFree')
         rm.close('div')
       }

@@ -169,12 +169,12 @@ describe('demo reset', () => {
 const ui = file => {
   let mod
   globalThis.sap = { ui: { define: (deps, factory) => { mod = factory() } } }
-  require(`../app/cockpit/${file}`)
+  require(`../app/${file}`)
   return mod
 }
 
 describe('cockpit logic', () => {
-  const logic = ui('logic.js')
+  const logic = ui('cockpit/logic.js')
   const load = (seatsMax, seatsBooked, highlighted, extra = {}) => ({ seatsMax, seatsBooked, highlighted, seatsFree: seatsMax - seatsBooked, cancelled: false, ...extra })
 
   test('labels and notes', () => {
@@ -224,12 +224,12 @@ describe('cockpit logic', () => {
   })
 
   test('dots never exceed the seats, whatever the counts', () => {
-    assert.deepEqual(logic.dots(load(364, 9, 9)), { booked: 0, highlighted: 9, free: 355 })
-    assert.deepEqual(logic.dots(load(264, 264, 2)), { booked: 262, highlighted: 2, free: 0 })
-    assert.deepEqual(logic.dots(load(100, 120, 0)), { booked: 100, highlighted: 0, free: 0 }, 'overbooked')
-    assert.deepEqual(logic.dots(load(100, 10, 50)), { booked: 0, highlighted: 10, free: 90 }, 'more highlighted than booked')
-    assert.deepEqual(logic.dots(load(-5, -1, -1)), { booked: 0, highlighted: 0, free: 0 })
-    assert.deepEqual(logic.dots({}), { booked: 0, highlighted: 0, free: 0 })
+    assert.deepEqual(logic.dots(load(364, 9, 9)), { booked: 0, highlighted: 9, held: 0, free: 355 })
+    assert.deepEqual(logic.dots(load(264, 264, 2)), { booked: 262, highlighted: 2, held: 0, free: 0 })
+    assert.deepEqual(logic.dots(load(100, 120, 0)), { booked: 100, highlighted: 0, held: 0, free: 0 }, 'overbooked')
+    assert.deepEqual(logic.dots(load(100, 10, 50)), { booked: 0, highlighted: 10, held: 0, free: 90 }, 'more highlighted than booked')
+    assert.deepEqual(logic.dots(load(-5, -1, -1)), { booked: 0, highlighted: 0, held: 0, free: 0 })
+    assert.deepEqual(logic.dots({}), { booked: 0, highlighted: 0, held: 0, free: 0 })
   })
 
   test('a flight is accepted the way people type it', () => {
@@ -245,8 +245,8 @@ describe('cockpit logic', () => {
       item('90000003', '0001', '0043', '2026-10-14', 'Rebooked'), item('90000003', '0002', '0043', '2026-10-14', 'Failed', 'FULL: UA 0043 2026-10-14 has no free seat.'),
       item('90000001', '0001', '0043', '2026-10-15')
     ]), [
-      { label: 'UA 0043 · 14 Oct', count: 2, rebooked: 1, failed: [{ text: '90000003/0002: FULL: UA 0043 2026-10-14 has no free seat.' }] },
-      { label: 'UA 0043 · 15 Oct', count: 1, rebooked: 0, failed: [] }
+      { label: 'UA 0043 · 14 Oct', count: 2, rebooked: 1, waiting: 0, failed: [{ text: '90000003/0002: FULL: UA 0043 2026-10-14 has no free seat.' }] },
+      { label: 'UA 0043 · 15 Oct', count: 1, rebooked: 0, waiting: 0, failed: [] }
     ])
     assert.deepEqual(logic.groupPlan(undefined), [])
   })
@@ -301,10 +301,63 @@ describe('cockpit logic', () => {
     assert.equal(logic.html('Plan:\n| Flight | Seats |\n|---|:--:|\n| UA 0941 | 3 |\n| LH 0400 | 2 |\nDone'),
       '<p>Plan:</p><ul><li><strong>Flight · Seats</strong></li><li>UA 0941 · 3</li><li>LH 0400 · 2</li></ul><p>Done</p>', 'FormattedText allows no table: rows become list items')
   })
+
+  test('a traffic jam in the disruption list, the board and the agent pane', () => {
+    assert.equal(logic.disruptionLabel({ kind: 'TrafficJam', road: 'A3' }), 'Traffic jam · A3')
+    assert.equal(logic.disruptionRoute({ kind: 'TrafficJam', airportFrom: 'FRA', approach: 'wiesbaden' }), 'FRA · via wiesbaden')
+    assert.equal(logic.disruptionLabel({ carrierId: 'LH', connectionId: '0402', flightDate: '2026-10-14' }), 'LH 0402 · 14 Oct')
+    assert.equal(logic.disruptionRoute({ airportFrom: 'FRA', airportTo: 'EWR' }), 'FRA–EWR')
+    assert.equal(logic.note(load(380, 371, 4, { affected: true })), '4 at risk')
+    assert.equal(logic.note(load(270, 268, 0, { held: 2 })), '2 free, 2 offered')
+    assert.deepEqual(logic.agentView({ agentStatus: 'Working', kind: 'TrafficJam' }, null).busy, 'The agent is working on the traffic jam')
+    assert.equal(logic.planTitle('Offered', false), 'Offers sent')
+  })
+
+  test('held seats are taken from the free ones, never more', () => {
+    assert.deepEqual(logic.dots(load(270, 268, 0, { held: 2 })), { booked: 268, highlighted: 0, held: 2, free: 0 })
+    assert.deepEqual(logic.dots(load(270, 268, 0, { held: 5 })), { booked: 268, highlighted: 0, held: 2, free: 0 }, 'at most the free seats')
+    assert.deepEqual(logic.dots({ seatsMax: 1, held: 1 }), { booked: 0, highlighted: 0, held: 1, free: 0 }, 'the legend\'s dot')
+  })
+
+  test('offers waiting for a reply are counted per flight', () => {
+    const item = (status, toConnectionId = '0404') => ({ travelId: '90000102', bookingId: '0001', toCarrierId: 'LH', toConnectionId, toFlightDate: '2026-10-20', status })
+    assert.deepEqual(logic.groupPlan([item('Offered'), item('Accepting'), item('Rebooked')]),
+      [{ label: 'LH 0404 · 20 Oct', count: 3, rebooked: 1, waiting: 2, failed: [] }])
+  })
+
+  test('the jam chart: drive time above typical per approach, the threshold, where the rule fired', () => {
+    const replay = { steps: 3, rule: { minDelayMin: 10, runs: 2 }, samples: [
+      { clock: '2026-10-20T08:00:00', origin: 'wiesbaden', live: 600, typical: 600 },
+      { clock: '2026-10-20T08:10:00', origin: 'wiesbaden', live: 1800, typical: 600 }],
+      fired: { clock: '2026-10-20T08:10:00', origin: 'wiesbaden', delayMin: 20 } }
+    assert.deepEqual(logic.chart(replay), { width: 300, height: 110, threshold: 64, lines: [{ origin: 'wiesbaden', points: '0,110 150,18' }], fired: 150 })
+    assert.equal(logic.chart({ samples: [] }), null)
+  })
+
+  test('the jam card: clock, report, rule note and map', () => {
+    const v = logic.replayView({ running: true, clock: '2026-10-20T08:10:00', label: 'Replay of a jam recorded on 2026-10-07 · passenger context simulated', steps: 6,
+      rule: { minDelayMin: 10, runs: 2 }, samples: [{ clock: '2026-10-20T08:10:00', origin: 'wiesbaden', live: 2400, typical: 1500 }],
+      reports: [{ clock: '2026-10-20T08:00:00', road: 'A3', location: 'Mönchhof - Frankfurter Kreuz', direction: 'Würzburg', delayMin: 25, trafficType: 'QUEUING_TRAFFIC' }],
+      fired: { clock: '2026-10-20T08:10:00', origin: 'wiesbaden', delayMin: 15 },
+      geo: { geometry: '{"type":"LineString","coordinates":[[8.47,50.048],[8.55,50.058]]}' } })
+    assert.deepEqual([v.running, v.clockText, v.report, v.note], [true, 'Tue 20 Oct · 08:10', 'A3 Mönchhof - Frankfurter Kreuz → Würzburg: +25 min', 'Rule fired at 08:10: wiesbaden +15 min over typical'])
+    assert.deepEqual(v.map.routes, [{ position: '8.47;50.048;0;8.55;50.058;0' }])
+    assert.deepEqual(v.map.spots, [{ position: '8.5622;50.0379;0', label: 'FRA', type: 'Default' }])
+    assert.equal(v.map.config.MapProvider[0].name, 'OSM')
+    assert.deepEqual(logic.replayView({ running: false, samples: [] }), { running: false, clock: '' })
+    assert.deepEqual(logic.replayView(null), { running: false, clock: '' })
+  })
+
+  test('the map has what GeoMap needs before any replay: it throws on an undefined configuration or zoom level', () => {
+    const { config, center, zoom } = logic.baseMap
+    assert.ok(config.MapProvider.length && config.MapLayerStacks.length, 'GeoMap ignores a configuration without both')
+    assert.match(center, /^\d+(\.\d+)?;\d+(\.\d+)?$/)
+    assert.ok(zoom >= 0)
+  })
 })
 
 describe('cockpit A2A client', () => {
-  const agent = ui('agent.js')
+  const agent = ui('cockpit/agent.js')
   // Answers one fetch and records the request the client made.
   const answering = async (response, call) => {
     const real = globalThis.fetch, sent = []
