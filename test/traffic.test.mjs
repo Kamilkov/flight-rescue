@@ -86,6 +86,29 @@ describe('the replay', () => {
     } finally { cds.env.requires.traffic.stepMs = 20 }
   })
 
+  test('Reset demo while the firing step writes the jam: no agent starts for it', async () => {
+    // The step that fires the rule is held inside its INSERT. The reset lands there and deletes the row the step writes.
+    let release, entered = false, holding = true
+    const held = new Promise(r => { release = r })
+    cds.db.before('INSERT', 'fr.Disruptions', async () => { if (holding) { entered = true; await held } }) // inert after this test
+    const agent = require('../srv/lib/agent-start.js'), realStart = agent.start, started = []
+    agent.start = ID => { started.push(ID) } // a spy: no real agent runs
+    try {
+      ok(await control('replayTraffic'))
+      await until(() => entered && traffic.state().fired) // the step is now inside the held INSERT
+      const reset = control('resetDemo') // stop() waits for that step, so this does not answer yet
+      await until(() => !traffic.state().running) // stop() has taken the replay away while the step is still held
+      release()
+      ok(await reset)
+      assert.deepEqual(started, [], 'no agent starts for a disruption the reset deletes')
+      assert.deepEqual(await SELECT.from('fr.Disruptions'), [])
+    } finally {
+      holding = false; release()
+      await traffic.stop() // a step still in flight ends before the real start is back
+      agent.start = realStart
+    }
+  })
+
   test('a jam that never reaches the threshold: the replay ends with "No jam detected" and nothing opens', async () => {
     cds.env.requires.traffic.data = join(root, 'test/fixtures/traffic-flat.json')
     ok(await control('replayTraffic'))

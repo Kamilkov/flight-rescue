@@ -77,7 +77,6 @@ async function tick(run) {
 }
 
 async function open(run, hit) {
-  if (replay !== run) return null // stopped meanwhile
   const clock = naive(Date.parse(hit.ts) + run.offset), r = reportAt(run.incident, hit.origin, hit.ts)
   const reason = r ? `${r.road} ${r.location ?? ''} → ${r.direction ?? ''}: ${String(r.trafficType ?? 'jam').toLowerCase().replace(/_/g, ' ')}${r.delayMin ? `, +${r.delayMin} min` : ''} (Autobahn report)`
     : `Drive time from ${hit.origin} +${hit.delayMin} min above typical`
@@ -87,7 +86,7 @@ async function open(run, hit) {
     approach: hit.origin, road: r?.road ?? ROADS[hit.origin]?.[0] ?? null, delayMinutes: r?.delayMin ?? hit.delayMin,
     reason: reason.replace(/\s+/g, ' ').slice(0, 200), agentStatus: 'Working'
   })))
-  agentStart.start(ID) // after the commit, so the agent finds the disruption
+  if (replay === run) agentStart.start(ID) // after the commit, so the agent finds the disruption; not after a reset meanwhile, which deletes the row
   return ID
 }
 
