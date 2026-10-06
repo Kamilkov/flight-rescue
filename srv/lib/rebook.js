@@ -194,6 +194,18 @@ async function propose(req, { disruption, assignments = [], rationale }, agentTa
     message: `Plan saved as Pending. Nothing changed in the booking system yet.${unassigned.length ? ` ${unassigned.length} booking(s) stay unassigned.` : ''}` }
 }
 
+/** Moves one plan item's booking in ABAP and records ABAP's answer on the item: Rebooked, or Failed with ABAP's message. */
+async function moveItem(i) {
+  let status = 'Rebooked', message = `Moved to ${flightName({ carrierId: i.toCarrierId, connectionId: i.toConnectionId, flightDate: i.toFlightDate })}.`
+  try {
+    await abap.rebook({ TravelId: i.travelId, BookingId: i.bookingId },
+      { CarrierId: i.fromCarrierId, ConnectionId: i.fromConnectionId, FlightDate: i.fromFlightDate },
+      { CarrierId: i.toCarrierId, ConnectionId: i.toConnectionId, FlightDate: i.toFlightDate })
+  } catch (e) { status = 'Failed'; message = e.message }
+  await UPDATE('fr.PlanItems', i.ID).with({ status, message })
+  return { status, message }
+}
+
 /** Runs an approved cancellation plan against ABAP, booking by booking, and records each answer. Never throws after the first call. */
 async function apply(req, planID, agentTask) {
   const plan = await SELECT.one.from('fr.Plans').where({ ID: planID })
@@ -208,16 +220,8 @@ async function apply(req, planID, agentTask) {
   const items = await SELECT.from('fr.PlanItems').where({ plan_ID: planID }).orderBy('travelId', 'bookingId')
   const failed = []
   for (const i of items) {
-    let status = 'Rebooked', message = `Moved to ${flightName({ carrierId: i.toCarrierId, connectionId: i.toConnectionId, flightDate: i.toFlightDate })}.`
-    try {
-      await abap.rebook({ TravelId: i.travelId, BookingId: i.bookingId },
-        { CarrierId: i.fromCarrierId, ConnectionId: i.fromConnectionId, FlightDate: i.fromFlightDate },
-        { CarrierId: i.toCarrierId, ConnectionId: i.toConnectionId, FlightDate: i.toFlightDate })
-    } catch (e) {
-      status = 'Failed'; message = e.message
-      failed.push({ travelId: i.travelId, bookingId: i.bookingId, message })
-    }
-    await UPDATE('fr.PlanItems', i.ID).with({ status, message })
+    const { status, message } = await moveItem(i)
+    if (status === 'Failed') failed.push({ travelId: i.travelId, bookingId: i.bookingId, message })
   }
   const rebooked = items.length - failed.length
   const status = !failed.length ? 'Applied' : rebooked ? 'PartiallyApplied' : 'Failed'
@@ -263,13 +267,7 @@ async function accept(req, itemID) {
   await openDisruption(req, plan.disruption_ID)
   const claimed = await UPDATE('fr.PlanItems').set({ status: 'Accepting' }).where({ ID: itemID, status: 'Offered' })
   if (claimed !== 1) return req.reject(409, `NOT_OFFERED: This offer is ${i.status}, not open.`)
-  let status = 'Rebooked', message = `Moved to ${flightName({ carrierId: i.toCarrierId, connectionId: i.toConnectionId, flightDate: i.toFlightDate })}.`
-  try {
-    await abap.rebook({ TravelId: i.travelId, BookingId: i.bookingId },
-      { CarrierId: i.fromCarrierId, ConnectionId: i.fromConnectionId, FlightDate: i.fromFlightDate },
-      { CarrierId: i.toCarrierId, ConnectionId: i.toConnectionId, FlightDate: i.toFlightDate })
-  } catch (e) { status = 'Failed'; message = e.message }
-  await UPDATE('fr.PlanItems', itemID).with({ status, message })
+  await moveItem(i)
 }
 
 module.exports = { impact, board, propose, apply, sendOffers, offerOf, accept, WINDOW_DAYS, JAM }
