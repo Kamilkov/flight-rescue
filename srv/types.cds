@@ -127,3 +127,43 @@ type Cancellation {
   notifyStatus  : String(1);
   notifyMessage : String(200);
 }
+
+/** The traffic replay so far, on the demo clock (FRA local time, 'YYYY-MM-DDTHH:MM:SS'). note: "No jam detected" when
+ *  the replay ended without the rule firing. */
+type TrafficReplay {
+  running    : Boolean;
+  done       : Boolean;
+  label      : String;
+  clock      : String;
+  steps      : Integer; // sample times in the whole replay
+  rule       : {
+    minDelayMin : Integer;
+    runs        : Integer;
+  };
+  samples    : many {
+    clock   : String;
+    origin  : String;
+    live    : Integer;
+    typical : Integer;
+  };
+  reports    : many {
+    clock       : String;
+    road        : String;
+    location    : String;
+    direction   : String;
+    delayMin    : Integer;
+    trafficType : String;
+  };
+  fired      : {
+    clock    : String;
+    origin   : String;
+    delayMin : Integer;
+  };
+  disruption : UUID;
+  geo        : {
+    lat      : Double;
+    lon      : Double;
+    geometry : LargeString; // GeoJSON LineString of the jam
+  };
+  note       : String;
+}

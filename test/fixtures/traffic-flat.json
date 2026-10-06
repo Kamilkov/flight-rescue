@@ -1,0 +1,23 @@
+{
+ "recordedOn": "2026-10-07",
+ "airport": "FRA",
+ "approach": "wiesbaden",
+ "simulated": true,
+ "label": "Flat test",
+ "samples": [
+  { "ts": "2026-10-07T06:00:00+00:00", "origin": "wiesbaden", "live": 1500, "typical": 1500 },
+  { "ts": "2026-10-07T06:00:00+00:00", "origin": "darmstadt", "live": 1400, "typical": 1400 },
+  { "ts": "2026-10-07T06:10:00+00:00", "origin": "wiesbaden", "live": 1560, "typical": 1500 },
+  { "ts": "2026-10-07T06:10:00+00:00", "origin": "darmstadt", "live": 1460, "typical": 1400 },
+  { "ts": "2026-10-07T06:20:00+00:00", "origin": "wiesbaden", "live": 1620, "typical": 1500 },
+  { "ts": "2026-10-07T06:20:00+00:00", "origin": "darmstadt", "live": 1400, "typical": 1400 },
+  { "ts": "2026-10-07T06:30:00+00:00", "origin": "wiesbaden", "live": 1800, "typical": 1500 },
+  { "ts": "2026-10-07T06:30:00+00:00", "origin": "darmstadt", "live": 1520, "typical": 1400 },
+  { "ts": "2026-10-07T06:40:00+00:00", "origin": "wiesbaden", "live": 1680, "typical": 1500 },
+  { "ts": "2026-10-07T06:40:00+00:00", "origin": "darmstadt", "live": 1460, "typical": 1400 },
+  { "ts": "2026-10-07T06:50:00+00:00", "origin": "wiesbaden", "live": 1500, "typical": 1500 },
+  { "ts": "2026-10-07T06:50:00+00:00", "origin": "darmstadt", "live": 1400, "typical": 1400 }
+ ],
+ "reports": [],
+ "geo": { "lat": 50.052, "lon": 8.51, "geometry": { "type": "LineString", "coordinates": [[8.47, 50.048], [8.51, 50.052], [8.55, 50.058]] } }
+}

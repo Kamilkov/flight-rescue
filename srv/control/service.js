@@ -1,6 +1,7 @@
 const cds = require('@sap/cds')
 const abap = require('../lib/abap')
 const rebook = require('../lib/rebook')
+const traffic = require('../lib/traffic')
 
 let demoFlight = null // what the last resetDemo seeded in ABAP; unknown after a restart
 const demoInfo = () => abap.connected() ? { backend: 'abap', ...demoFlight } : { backend: 'mock', ...abap.MOCK_DEMO, trafficFlight: abap.MOCK_TRAFFIC }
@@ -30,7 +31,10 @@ module.exports = class ControlService extends cds.ApplicationService {
     })
     this.on('flightBoard', req => rebook.board(req, req.data.disruption))
     this.on('demoInfo', demoInfo)
+    this.on('replayTraffic', () => traffic.start(demoInfo().trafficFlight))
+    this.on('trafficReplay', () => traffic.state())
     this.on('resetDemo', async () => {
+      await traffic.stop() // first: a step of a running replay must not open a disruption after the reset
       if (abap.connected()) demoFlight = await abap.resetDemo() // first: if ABAP refuses, the app keeps its state
       else await abap.resetMockCancellations()
       await DELETE.from('fr.PlanItems')
