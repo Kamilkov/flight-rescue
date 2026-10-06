@@ -113,9 +113,12 @@ describe('impact of a traffic jam', () => {
       toCarrierId: 'DL', toConnectionId: '0107', toFlightDate: '2026-10-20', status: 'Offered' })
     await INSERT.into('fr.Plans').entries({ ID: randomUUID(), disruption_ID: A, status: 'Offered', items: [item('90000101', '0001'), item('90000101', '0002')] })
     const listed = async () => (await agentTool('disruptionImpact', { disruption: B })).alternatives.map(a => [a.carrierId, a.connectionId, a.seatsAvailable])
+    const heldOnA = async () => ok(await get(`flightBoard(disruption=${A})`)).value.find(f => f.carrierId === 'DL' && f.connectionId === '0107').held
     assert.deepEqual(await listed(), [['LH', '0404', 3]], 'DL 0107: 2 free, 2 offered by A')
+    assert.equal(await heldOnA(), 2, 'its own board shows both offers as held')
     await UPDATE('fr.Disruptions', A).set({ status: 'Closed' })
     assert.deepEqual(await listed(), [['DL', '0107', 2], ['LH', '0404', 3]], 'A is closed: its offers can no longer be answered')
+    assert.equal(await heldOnA(), 0, 'closed: its own board holds nothing any more')
   })
 })
 

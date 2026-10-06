@@ -135,7 +135,8 @@ async function board(req, disruptionID) {
   return [...(own ? [load(own, { cancelled: true, highlighted: bookings.length })] : []), ...others.map(f => load(f, { highlighted: movedTo[flightKey(f)] ?? 0 }))]
 }
 
-/** Jam: each flight with bookings at risk or offers (affected), then the later flights that day on its route. */
+/** Jam: each flight with bookings at risk or offers (affected), then the later flights that day on its route.
+ *  Offers hold seats only while the jam is open, as in heldSeats: a closed jam's board shows none as held. */
 async function jamBoard(d) {
   const [now, items] = await Promise.all([jamImpact(d), SELECT.from('fr.PlanItems').where({ 'plan.disruption_ID': d.ID })])
   const own = new Map(), atRisk = {}
@@ -152,7 +153,7 @@ async function jamBoard(d) {
     const route = { carrierId: flight.CarrierId, connectionId: flight.ConnectionId, flightDate: flight.FlightDate, airportFrom: flight.AirportFrom, airportTo: flight.AirportTo }
     for (const a of await abap.sameRoute(route, 0))
       if (at(a.FlightDate, a.DepartureTime) > at(flight.FlightDate, flight.DepartureTime))
-        rows.push(load(a, { highlighted: count(['Rebooked'], a), held: count(['Offered', 'Accepting'], a) }))
+        rows.push(load(a, { highlighted: count(['Rebooked'], a), held: d.status === 'Open' ? count(['Offered', 'Accepting'], a) : 0 }))
   }
   return rows
 }
