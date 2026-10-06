@@ -422,3 +422,78 @@ describe('cockpit in a browser', () => {
     assert.equal(res.headers['www-authenticate'], 'Basic realm="Users"')
   })
 })
+
+describe('passenger page', () => {
+  const page = ui('passenger/offer.js')
+  const o = (status, extra = {}) => ({ status, reason: 'A3 Mönchhof - Frankfurter Kreuz → Würzburg: queuing traffic, +25 min (Autobahn report)',
+    current: { carrierId: 'LH', connectionId: '0400', departureTime: '10:55:00' }, offered: { carrierId: 'LH', connectionId: '0404', departureTime: '17:15:00' }, ...extra })
+
+  test('what the phone shows for each state of the offer', () => {
+    assert.deepEqual(page.offerView({ status: null }), { kind: 'none', title: 'No offer', text: 'Nothing to do: your flight is on track.', action: false })
+    assert.deepEqual(page.offerView(o('Offered')), { kind: 'offer', title: 'Traffic jam on your way to the airport',
+      text: 'A3 Mönchhof - Frankfurter Kreuz → Würzburg: queuing traffic, +25 min (Autobahn report). You may miss LH 0400 at 10:55. Switch to LH 0404 at 17:15, free of charge?', action: true })
+    assert.equal(page.offerView(o('Accepting')).kind, 'wait')
+    assert.deepEqual(page.offerView(o('Rebooked')), { kind: 'done', title: 'You are rebooked', text: 'You fly LH 0404 at 17:15 instead of LH 0400 at 10:55.', action: false })
+    assert.deepEqual(page.offerView(o('Failed', { message: 'FULL: LH 0404 2026-10-20 has no free seat.' })),
+      { kind: 'error', title: 'The rebooking did not work', text: 'FULL: LH 0404 2026-10-20 has no free seat.', action: false })
+  })
+
+  test('is served, loads its module and talks only to the passenger service', async () => {
+    const res = await srv.get('/passenger/index.html', as('passenger'))
+    assert.equal(res.status, 200)
+    assert.match(res.data, /<meta name="viewport"/)
+    assert.match(res.data, /<script src="offer\.js"><\/script>/)
+    assert.match(res.data, /\/odata\/v4\/passenger\//)
+    assert.doesNotMatch(res.data, /odata\/v4\/control/)
+  })
+
+  // The page's own script, run against stand-ins for the DOM and the network; the polls are driven by hand.
+  async function phone(first) {
+    const html = (await srv.get('/passenger/index.html', as('passenger'))).data
+    const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1]
+    const els = {}, answers = [first], calls = []
+    const element = () => ({ hidden: false, disabled: false, dataset: {}, writes: 0, text: '', get textContent() { return this.text }, set textContent(v) { this.text = v; this.writes++ }, addEventListener(event, fn) { this.click = fn } })
+    const document = { getElementById: id => els[id] ??= element() }
+    const fetch = async (url, init) => {
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      const a = answers.shift()
+      if (a instanceof Error) throw a
+      return { ok: a.status < 400, status: a.status, json: async () => a.body }
+    }
+    let load
+    new Function('document', 'fetch', 'setInterval', 'offer', script)(document, fetch, fn => { load = fn }, page)
+    const settle = () => new Promise(setImmediate)
+    await settle()
+    return { els, calls,
+      poll: async answer => { answers.push(answer); await load() },
+      accept: async answer => { answers.push(answer); els.accept.click(); await settle() } }
+  }
+  const reply = body => ({ status: 200, body })
+
+  test('Accept calls the passenger service; a refusal stays while the card is the same and goes when the card changes', async () => {
+    const p = await phone(reply(o('Offered')))
+    assert.deepEqual([p.els.card.dataset.kind, p.els.accept.hidden, p.els.error.hidden], ['offer', false, true])
+    await p.accept({ status: 409, body: { error: { message: 'CLOSED: Disruption d-1 is closed.' } } }) // the dispatcher closed it; the card still offers
+    assert.deepEqual(p.calls, ['GET /odata/v4/passenger/myOffer()', 'POST /odata/v4/passenger/acceptOffer'])
+    assert.deepEqual([p.els.error.hidden, p.els.error.text], [false, 'CLOSED: Disruption d-1 is closed.'])
+    await p.poll(reply(o('Offered')))
+    assert.deepEqual([p.els.error.hidden, p.els.error.text], [false, 'CLOSED: Disruption d-1 is closed.'], 'the next poll finds the same card')
+    await p.poll(reply(o('Rebooked')))
+    assert.deepEqual([p.els.card.dataset.kind, p.els.error.hidden], ['done', true], 'a new card does not keep an error about the old one')
+  })
+
+  test('the card is a live region: a poll that finds nothing new writes nothing; a failed poll shows once and clears with the next good one', async () => {
+    const p = await phone(reply(o('Offered')))
+    const writes = () => ['title', 'text', 'error'].map(id => p.els[id].writes)
+    const before = writes()
+    await p.poll(reply(o('Offered')))
+    assert.deepEqual(writes(), before)
+    await p.poll(new Error('Failed to fetch'))
+    assert.deepEqual([p.els.error.hidden, p.els.error.text], [false, 'Failed to fetch'])
+    const once = p.els.error.writes
+    await p.poll(new Error('Failed to fetch'))
+    assert.equal(p.els.error.writes, once, 'the same failure is not written, and so not read out, again')
+    await p.poll(reply(o('Offered')))
+    assert.equal(p.els.error.hidden, true)
+  })
+})
