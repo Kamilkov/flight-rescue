@@ -131,13 +131,19 @@ type FlightLoad {
   legNo         : Integer;
 }
 
-/** Which booking system the app talks to, the flight the cancellation demo is built around, and the traffic scenario's flight. */
+/** Which booking system the app talks to, the flight the cancellation demo is built around, and the traffic and itinerary
+ *  scenarios' flights. */
 type DemoInfo {
   backend       : String(4); // abap or mock
   carrierId     : String(3);
   connectionId  : String(4);
   flightDate    : Date;
   trafficFlight : {
+    carrierId    : String(3);
+    connectionId : String(4);
+    flightDate   : Date;
+  };
+  itineraryFlight : {
     carrierId    : String(3);
     connectionId : String(4);
     flightDate   : Date;

@@ -138,9 +138,11 @@ async function resetMockCancellations() {
 
 const MOCK_DEMO = { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12' } // srv/external/data
 const MOCK_TRAFFIC = { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-20' } // srv/external/data: the traffic scenario
+const MOCK_ITINERARY = { carrierId: 'LH', connectionId: '0454', flightDate: '2026-10-27' } // srv/external/data: the itinerary scenario
 const connected = () => !!cds.env.requires.ZFR_REBOOK?.credentials?.url
 
-/** Reseeds ZFR_BOOKING by running ZCL_FR_GENERATE_DATA. Resolves with the demo flight and the traffic scenario's flight its output names. */
+/** Reseeds ZFR_BOOKING by running ZCL_FR_GENERATE_DATA. Resolves with the demo flight and the traffic and itinerary
+ *  scenarios' flights its output names. */
 // ponytail: the ADT class-run endpoint is a developer API, so this works with a developer user on a trial system only.
 // With a communication user (BTP ABAP environment) the reset would have to be its own released service.
 async function resetDemo() {
@@ -158,9 +160,10 @@ async function resetDemo() {
   })
   const text = await run.text()
   const line = name => run.ok && text.match(new RegExp(`^${name} (\\S+) (\\d{4}) (\\d{4}-\\d{2}-\\d{2})\\s*$`, 'm'))
-  const m = line('DEMO_FLIGHT'), t = line('TRAFFIC_FLIGHT')
+  const flightOf = m => m ? { carrierId: m[1], connectionId: m[2], flightDate: m[3] } : null
+  const m = line('DEMO_FLIGHT')
   if (!m) throw failed(run.status, text)
-  return { carrierId: m[1], connectionId: m[2], flightDate: m[3], trafficFlight: t ? { carrierId: t[1], connectionId: t[2], flightDate: t[3] } : null }
+  return { ...flightOf(m), trafficFlight: flightOf(line('TRAFFIC_FLIGHT')), itineraryFlight: flightOf(line('ITINERARY_FLIGHT')) }
 }
 
-module.exports = { flight, bookingsOn, sameRoute, departures, itineraries, rebook, rebookItinerary, cancelFlight, cancellation, resetMockCancellations, iso, plusDays, padded, connected, resetDemo, MOCK_DEMO, MOCK_TRAFFIC }
+module.exports = { flight, bookingsOn, sameRoute, departures, itineraries, rebook, rebookItinerary, cancelFlight, cancellation, resetMockCancellations, iso, plusDays, padded, connected, resetDemo, MOCK_DEMO, MOCK_TRAFFIC, MOCK_ITINERARY }

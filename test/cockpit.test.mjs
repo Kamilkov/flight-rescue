@@ -106,10 +106,13 @@ async function connectedTo(answer, run) {
 }
 const flight = i => ({ backend: i.backend, carrierId: i.carrierId, connectionId: i.connectionId, flightDate: i.flightDate })
 const MOCK = { backend: 'mock', carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12' }
+const ITINERARY_TEXT = 'DEMO_FLIGHT LH 0402 2026-10-20\nTRAFFIC_FLIGHT LH 0400 2026-10-21\n4203 itinerary bookings added on FRA-SFO.\nITINERARY_FLIGHT LH 0454 2026-10-22\n'
 
 describe('demo reset', () => {
-  test('demoInfo names the mock flight while ZFR_REBOOK is mocked', async () => {
-    assert.deepEqual(flight(ok(await get('demoInfo()'))), MOCK)
+  test('demoInfo names the mock flight while ZFR_REBOOK is mocked, and the itinerary scenario\'s', async () => {
+    const info = ok(await get('demoInfo()'))
+    assert.deepEqual(flight(info), MOCK)
+    assert.deepEqual(info.itineraryFlight, { carrierId: 'LH', connectionId: '0454', flightDate: '2026-10-27' })
   })
 
   test('resetDemo clears disruptions and plans; an approval from before the reset changes nothing', async () => {
@@ -147,7 +150,14 @@ describe('demo reset', () => {
       assert.deepEqual(ok(await get('demoInfo()')).trafficFlight, traffic, 'remembered until the next reset')
     })
     await connectedTo({ status: 200, text: 'DEMO_FLIGHT LH 0402 2026-10-20\n' }, async () => {
-      assert.equal(ok(await control('resetDemo')).trafficFlight, null, 'an older generator names no traffic flight')
+      const info = ok(await control('resetDemo'))
+      assert.equal(info.trafficFlight, null, 'an older generator names no traffic flight')
+      assert.equal(info.itineraryFlight, null, 'nor an itinerary flight')
+    })
+    await connectedTo({ status: 200, text: ITINERARY_TEXT }, async () => {
+      const itinerary = { carrierId: 'LH', connectionId: '0454', flightDate: '2026-10-22' }
+      assert.deepEqual(ok(await control('resetDemo')).itineraryFlight, itinerary)
+      assert.deepEqual(ok(await get('demoInfo()')).itineraryFlight, itinerary, 'remembered until the next reset')
     })
   })
 
