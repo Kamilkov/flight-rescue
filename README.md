@@ -1,6 +1,6 @@
 # Flight Rescue
 
-A flight is cancelled. A **CAP-level agent** (`@cap-js/agents`, [Sep 2026 release](https://cap.cloud.sap/docs/releases/2026/sep26#new-cap-level-agents)) reads the affected bookings from your **ABAP trial**, proposes moving them to other flights on the same route, and **pauses for a dispatcher to approve**. Only after approval are the bookings moved in ABAP, one by one, through a custom RAP action.
+A flight is cancelled. A **CAP-level agent** (`@cap-js/agents`, [Sep 2026 release](https://cap.cloud.sap/docs/releases/2026/sep26#new-cap-level-agents)) reads the affected bookings from your **ABAP trial**, proposes moving them to the best itineraries of one to three flights to their destination, which HANA Graph finds inside the ABAP system, and **pauses for a dispatcher to approve**. Only after approval are the bookings moved in ABAP, one by one, through a custom RAP action.
 
 The server decides what is valid, the model only chooses among listed options, and both of the agent's actions that change anything (`applyRebooking`, `sendOffers`) are `@agent.hitl`. A passenger's Accept, after a traffic jam, moves a booking in ABAP outside the agent.
 
@@ -31,6 +31,9 @@ The agent has a second trigger, no cancellation needed: a traffic jam on the way
 | `srv/events/` | REST service for the booking system: ABAP reports a cancelled flight here |
 | `srv/lib/agent-start.js` | Starts the agent for a reported cancellation or an opened traffic jam, as the dispatcher on duty |
 | `scripts/live-check.mjs` | Cancels the demo flight on the deployed app and waits for ABAP's event and the agent; `traffic` replays the jam and accepts the offer |
+| `scripts/abap-check.mjs` | Checks against the ABAP system itself: the graph against a plain search for every airport pair, the booking actions, and the rollback of a failed change set |
+| `scripts/secrets.mjs`, `scripts/a4h.mjs`, `scripts/public-app.mjs` | Shared by the checks: only the secrets a script needs, the A4H client, and the public app's check and clean-up |
+| `srv/lib/itineraries.js` | The graph's rules as a plain search: the mock's itineraries, and the oracle the live graph is checked against |
 | `Dockerfile` | The container that runs next to the ABAP trial on the VPS |
 | `srv/lib/` | `abap.js` (the only module that calls ABAP), `rebook.js` (impact, propose, apply, send offers, accept) and `traffic.js` (the replay and its rule) |
 | `srv/traffic/data/incident.json`, `scripts/import-incident.mjs` | The simulated jam the replay plays, and the script that builds it |
@@ -73,7 +76,7 @@ plan waiting for approval, or the error), with a link to this page for the appro
 
 **Reset demo** starts over. Against ABAP it runs `ZCL_FR_GENERATE_DATA` through the ADT class-run endpoint (developer user on a trial system only), which recopies `/DMO/BOOKING` and rebuilds the demo scenario, and returns the scenario's flight. Against the mock it clears disruptions, plans and the mock's cancellations; restart the app to restore the mock bookings.
 
-The demo scenario is on FRA–EWR, two weeks after the day the generator runs: LH 0402 with 9 bookings to cancel, and five alternatives with 2, 1, 3, 0 and 0 free seats, so the agent has to split the passengers and leave some unassigned.
+The demo scenario is on FRA–EWR, two weeks after the day the generator runs: LH 0402 with 9 bookings to cancel, and five direct alternatives with 2, 1, 3, 0 and 0 free seats, so on direct flights alone the agent would have to split the passengers and leave some unassigned.
 
 To start it: `npm run watch` against the mock, or `npm start` with the variables of [Connect to your ABAP trial](#connect-to-your-abap-trial). Record at 1440 × 900 or larger: in a smaller window the six maps of the ABAP scenario don't fit and pane 3 scrolls.
 
@@ -87,6 +90,9 @@ Create a package (for example `ZFLIGHT_RESCUE`) and add the objects from `abap/`
 | Class `ZCL_FR_GENERATE_DATA` | `zcl_fr_generate_data.clas.abap`. Run it with F9: it copies `/DMO/BOOKING` into `ZFR_BOOKING` and adds the demo scenario (about 1,500 bookings) and the traffic scenario (9 on LH 0400, plus fillers on the later flights; [below](#the-abap-event-and-the-vps)), with travel IDs from `90000000`, so nothing writes to `/DMO/` tables |
 | CDS views `ZI_FR_FlightLoad`, `ZI_FR_Flight`, `ZR_FR_Booking` | `*.ddls.asddls` |
 | Abstract entity `ZA_FR_RebookTarget` | `za_fr_rebooktarget.ddls.asddls` |
+| CDS views `ZI_FR_FlightTime`, `ZI_FR_GraphFlight`, `ZI_FR_GraphVertex`, `ZI_FR_GraphEdge` | `zi_fr_flighttime.ddls.asddls` and the three `zi_fr_graph*.ddls.asddls`, in this order |
+| Custom entity `ZI_FR_Itinerary` and class `ZCL_FR_ITINERARIES` | `zi_fr_itinerary.ddls.asddls`, `zcl_fr_itineraries.clas.*`. They name each other: activate them together |
+| Abstract entity `ZA_FR_RebookItinerary` | `za_fr_rebookitinerary.ddls.asddls`, before the behavior definition |
 | Behavior definition `ZR_FR_Booking` | `zr_fr_booking.bdef.asbdef`. Use the quick fix to create `ZBP_R_FR_BOOKING`, then paste the local types from `zbp_r_fr_booking.clas.locals_imp.abap` |
 | Service definition `ZFR_REBOOK` | `zfr_rebook.srvd.srvdsrv` |
 | Service binding `ZFR_REBOOK_O4` | Create it from the service definition: OData V4 - Web API. Then publish it |
@@ -111,7 +117,7 @@ export ABAP_CLIENT=001         # Docker trial only
 npm run watch
 ```
 
-The user and password are read as `SAP_USER` and `SAP_PASSWORD`, so they can come from a secrets file without copying values into the project, for example `SAP_USER=$(node --env-file=<your secrets file> -p process.env.SAP_USER)`.
+The user and password are read as `SAP_USER` and `SAP_PASSWORD`, so they can come from a secrets file without copying values into the project, for example `node scripts/secrets.mjs SAP_USER SAP_PASSWORD -- npm run watch`. It reads only those two names from `~/.config/ai/secrets.env` (or the file `SECRETS_FILE` names) and starts the command with them.
 
 `server.js` turns these into credentials for `ZFR_REBOOK` (and switches on CSRF handling for SAP Gateway) before CAP decides what to mock, so with `ABAP_URL` set nothing is mocked. The log then shows `ZFR_REBOOK` being connected, not mocked.
 
@@ -141,7 +147,7 @@ While a replay exists (until **Reset demo**), a Traffic panel fills the bottom h
 ## Design choices
 
 - **Human in the loop.** `applyRebooking` is `@agent.hitl`: the A2A task goes to `input-required`, and nothing reaches ABAP until a dispatcher approves. Reject closes the task and the plan stays `Pending` until superseded.
-- **The server decides, the model chooses.** `disruptionImpact` lists the only valid alternatives: same route, same day up to two days later, seats left after other pending plans. `proposeRebooking` refuses any booking, flight or seat count outside that list. Tool schemas are strict, so extra arguments are refused.
+- **The server decides, the model chooses.** `disruptionImpact` lists the only valid options. For a cancellation, these are the itineraries ABAP's graph finds: one to three flights, the first on the day or up to two days later. For a traffic jam, they are later flights the same day. Both count the seats left after other pending plans and open offers. `proposeRebooking` refuses any booking, flight or seat count outside that list. Tool schemas are strict, so extra arguments are refused.
 - **Bound to its task.** Only the agent task that proposed a plan can request its approval. The task ID travels server-side, never as an argument. An edited resume pointing at another plan is refused (`NOT_REVIEWED`).
 - **ABAP is the authority.** Each booking is moved with an expected current flight, so a booking changed in ABAP after the proposal fails alone (`STALE`) and the rest still apply (`PartiallyApplied`). Each item records ABAP's answer.
 - **Narrow agent.** `@agent.connect: 'none'` means no MCP servers and no subagents. There is deliberately no `AGENTS.md`: with one, the plugin builds a deep agent with file and subagent tools. The system prompt is the service's doc comment instead.
@@ -150,6 +156,42 @@ While a replay exists (until **Reset demo**), a Traffic panel fills the bottom h
 - **The server picks who is at risk.** Drivers via the jammed approach, on flights leaving 60–180 min after the jam. An offer is a flight on the same route that day, leaving at least 45 min after the booking's own, with a seat free. The model sees booking references and counts, never the passenger context, which no service the agent can reach exposes. Bookings without context are not contacted.
 - **Offers hold seats.** Seats offered and not answered yet count as taken for every disruption, cancellations included, until the passenger answers or the dispatcher closes the jam. In the demo only the `passenger` booking (90000102/0001) answers, so the other offers hold their seats until the jam is closed.
 - **SAP API Policy.** The agent only exposes this app's own services and a custom `Z` RAP service, which is within what the CAP docs allow for CAP-level agents. It does not proxy SAP application APIs.
+
+## Rerouting with HANA Graph
+
+When a flight is cancelled, its passengers are no longer limited to later flights on the same route. The ABAP system's own HANA lists the ten best itineraries of one to three flights to their destination: earliest arrival first, then fewer connections, 90 min to 12 h to connect, and a free seat on every flight.
+
+- **The graph** is a set of CDS views over `ZI_FR_Flight` for the next 30 days.
+  - Every flight is a vertex three times, once per leg number. Every airport has a `DEP:` source and an `ARR:` sink.
+  - Connections only lead from leg n to leg n+1, so every path is an itinerary of at most three flights. The leg limit is part of the graph, not a filter after the search.
+  - A path costs 10 × its arrival + its connections, so the k shortest paths are the k best itineraries.
+- **The search** is `ZCL_FR_ITINERARIES`.
+  - It holds an AMDP graph workspace on those views and a GraphScript procedure: `K_Shortest_Paths` on a subgraph without connections through the destination or back to the origin.
+  - It also serves the query behind `ZFR_REBOOK/Itineraries`.
+  - The graph is built from the live tables on every call, without a copy.
+- **Booking** is the RAP action `rebookItinerary`:
+  - It moves the booking to the first flight and adds a booking for each further flight to its travel, at price 0.
+  - It is all or nothing: a failed action fails its OData request, and RAP saves none of it.
+  - Both actions lock the flights they book onto. A validation on save counts every flight's bookings, so neither two requests nor two actions in one change set share a last seat.
+- **Checks:**
+  - `scripts/abap-check.mjs graph` compares the graph with a plain search (`srv/lib/itineraries.js`) for every pair of airports.
+  - `scripts/abap-check.mjs booking` checks the refusals and the rollback of a failed change set.
+  - `scripts/live-check.mjs itinerary` runs the whole flow against an app on your machine.
+  - ABAP reports cancellations only to the app behind `ZFR_CAP_EVENTS`, so these checks hand the event to that app themselves.
+
+Limits:
+- `/DMO/` stores local times without time zones or arrival dates. The arrival day is guessed: right for FRA, JFK, EWR, SFO, MIA and HAV, wrong for SFO→SIN. Routing elsewhere needs airport time zones.
+- Extra legs cost 0; there is no fare logic.
+- New booking IDs are the travel's highest + 1 without a lock on the travel. Two rebookings into one travel at the same moment can collide, and the second then fails as a whole.
+- The graph is rebuilt on every query: 66,952 edges, the slowest answer 956 ms (2026-10-07; the first call after an activation took 13.5 s).
+- k = 10 can cut options off when many seats are held elsewhere.
+- With three legs at most, SQL joins would do as well. The graph gives ranked best-k results in one call, and the layers keep the leg limit inside the search. In the real data, 14 airport pairs have a four-leg path among their ten earliest: a filter after the search would have lost itineraries there.
+
+**Verified on 2026-10-07** against A4H (release 816, HANA 2.00.087): `abap-check.mjs graph` compared the graph with the plain search for all 56 airport pairs (the 8 airports with flights in the window; VCE has none there), and all 56 matched. The slowest answer was FRA→MIA in 956 ms, and the first call after an activation took 13.5 s. 14 of the pairs have a four-leg path among their ten earliest itineraries (the script lists them). The first itinerary for FRA→HAV has three flights: UA 0043 › AA 2933 › AA 0017 the next morning.
+
+`abap-check.mjs booking` passed. The refusals `STALE`, `CHAIN`, `LAYOVER` and `FULL` worked, and after a cancellation both actions refuse the cancelled flight with `NOT_FLYING`, while the itineraries no longer list it. Two rebookings into one travel in one change set answered `NOT_SAVED: 90000202/0002 stays where it was.`, and the bookings, the travel's rows and the seats stayed as they were. Two travels after the last seat in one change set were refused at save with `FULL`, and nothing was saved. Of two requests at once, one got the last seat (B6 0415 booked 189 → 190) and the other got `FULL`. One rebooking that goes through moved the booking to LH 0400 at its price and added a booking for DL 0365 to its travel at price 0.
+
+End to end, `APP_URL=http://localhost:4014 node scripts/live-check.mjs itinerary` ran with the real model against A4H and exited 0 after 45 s; the agent was waiting for approval after 33 s. All 9 bookings of the cancelled flight were rebooked and checked one by one in ABAP: 8 on the same day (DE 2096 ×2, UA 0059, LH 0400 › DL 0365 ×3, DL 0107 › DL 0365 ×2, five of them over two flights) and 1 on the next day (LH 0454 on 2026-10-23). Every planned flight's seats rose by exactly its planned bookings. Afterwards the demo was reset in A4H and in the public app.
 
 ## Tests
 
@@ -165,6 +207,8 @@ npm test
 - `test/jam.test.mjs`: the traffic scenario's data, a jam's impact (who is at risk, the 60–180 min window, the flights offered), seats held by offers until the jam is closed, refused proposals, the jam's seat board, and the agent: it pauses at `sendOffers`, approval changes nothing in ABAP, and `applyRebooking` and `sendOffers` refuse each other's plans.
 - `test/traffic.test.mjs`: the trigger rule, the replay on the demo clock and the `TrafficJam` it opens, one replay at a time, a reset during one, Pause, Resume and Step, and the shipped `incident.json`. A short fixture incident and a 20 ms step keep it fast.
 - `test/passenger.test.mjs`: the phone's service: only `passenger` reads and accepts, no offer before **Send offers**, Accept moves the booking once, ABAP's refusal comes back as the offer's answer, and a closed jam takes no answers.
+- `test/itineraries.test.mjs`: the graph's rules as a plain search (the leg limit, no airport twice, ranking, the window and layovers) and `rebookItinerary`'s checks.
+- `test/reroute.test.mjs`: a cancellation over itineraries against the mock: impact with held seats per leg, plans checked per flight, approval through `rebookItinerary`, `NOT_FLYING` after a leg was cancelled, the board.
 
 **Verified on 2026-09-30** against an ABAP Platform Trial (A4H, release 816, package `$ZFLIGHT_RESCUE`) with `claude-opus-5-5`: all objects active, 13,144 bookings generated, binding published. Through the chat preview, an approved plan moved 3 bookings from UA 0926 to UA 0058 on 2027-02-28 (seats booked 3 → 0 and 0 → 3 in `ZI_FR_Flight`); a rejected plan for NQ 0802 changed nothing. Called directly, the action refused with `STALE`, `NO_FLIGHT`, `ROUTE` and `NO_BOOKING`. Not exercised against ABAP: `CANCELLED` and `FULL` (the generated data has no cancelled booking and no full flight), a partially applied plan, and a BTP ABAP environment with a communication arrangement. The tests use a scripted model and the mock.
 
@@ -182,7 +226,7 @@ The cockpit, on the same day and system: Reset demo seeded the scenario for LH 0
   bound to `127.0.0.1:4024` only. `flight-rescue.env` holds `ANTHROPIC_API_KEY`, `SAP_USER`, `SAP_PASSWORD`,
   `DISPATCHER_PASSWORD`, `ABAP_EVENTS_PASSWORD`, `PASSENGER_PASSWORD`, `ABAP_URL`, `ABAP_CLIENT`.
 - **Cockpit:** `ssh -L 4024:127.0.0.1:4024 root@<vps>`, then http://localhost:4024/cockpit/index.html.
-- **Live check:** `APP_URL=http://localhost:4024 node --env-file=<secrets> scripts/live-check.mjs`.
+- **Live check:** `APP_URL=http://localhost:4024 node scripts/live-check.mjs`. It reads only the secrets it needs from `~/.config/ai/secrets.env` (`scripts/secrets.mjs`), and exits 2 if its clean-up failed.
 - **Traffic scenario:** `ZCL_FR_GENERATE_DATA` also builds it on FRA–JFK, on the first day two weeks out or later on
   which LH 0400, DL 0107 and LH 0404 all fly: 9 bookings on LH 0400 (travels 90000101–105 with 2, 2, 1, 2 and 2), and
   DL 0107, LH 0404 and DE 2016 (if it flies that day) filled to leave 2, 3 and 0 free seats. It prints
@@ -194,9 +238,9 @@ The cockpit, on the same day and system: Reset demo seeded the scenario for LH 0
   password of the app's `passenger` user, and Caddy holds its hash. The roles keep the two users apart: the control
   service and the agent need `Dispatcher`, `PassengerService` needs `Passenger`. The phone opens `/passenger/index.html`
   on that host; the tunnel URL, http://localhost:4024/passenger/index.html, is for the laptop (login `passenger`, in a private window or another browser: the browser reuses the dispatcher's login for this address, and the passenger service refuses it with 403).
-- **Live check, traffic:** `APP_URL=http://localhost:4024 node --env-file=<secrets> scripts/live-check.mjs traffic`
+- **Live check, traffic:** `APP_URL=http://localhost:4024 node scripts/live-check.mjs traffic`
   resets the demo, replays the incident, approves the offers as `dispatcher`, accepts the phone booking's offer as
-  `passenger` (`DISPATCHER_PASSWORD` and `PASSENGER_PASSWORD` come from the secrets file) and exits 0 only if that
+  `passenger` (only `DISPATCHER_PASSWORD` and `PASSENGER_PASSWORD` are read from the secrets file) and exits 0 only if that
   booking ends up Rebooked on the offered flight.
 - **Limits:** a failed call from ABAP is recorded on the cancellation (`NotifyStatus F`), not retried; SQLite is in
   memory, so a container restart loses disruptions and plans. A production setup would put SAP Event Mesh between
