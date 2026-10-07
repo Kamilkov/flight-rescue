@@ -151,6 +151,20 @@ const load = (f, extra) => ({
   cancelled: false, affected: false, highlighted: 0, held: 0, ...extra
 })
 
+// ponytail: the cockpit polls the board every 1–2 s, and ABAP's list is a HANA Graph query (about 0.5 s warm, 13.5 s
+// after an activation) that runs while the request holds the app's only database connection. So the board asks for it
+// at most every 30 s per disruption: the plan's itineraries and every flight's seats are read on each poll, only the
+// list of extra itineraries may be up to 30 s old. Per process: several app instances would each keep their own.
+const LISTED_MS = 30000, listed = new Map() // disruption ID → { at, routes }
+async function listedItineraries(d) {
+  const hit = listed.get(d.ID)
+  if (hit && Date.now() - hit.at < LISTED_MS) return hit.routes
+  const routes = await abap.itineraries(d)
+  for (const [ID, e] of listed) if (Date.now() - e.at >= LISTED_MS) listed.delete(ID)
+  listed.set(d.ID, { at: Date.now(), routes })
+  return routes
+}
+
 /** Cancellation: the cancelled flight, then the legs of up to 5 itineraries, the latest plan's first, then the listed
  *  ones; a flight shared by itineraries shows in each of their rows. Jam: see jamBoard. */
 async function board(req, disruptionID) {
@@ -159,7 +173,7 @@ async function board(req, disruptionID) {
   if (d.kind === 'TrafficJam') return jamBoard(d)
   const plan = await SELECT.one.from('fr.Plans').columns('ID').where({ disruption_ID: d.ID }).orderBy('createdAt desc')
   const [own, routes, bookings, planned, rebooked] = await Promise.all([
-    abap.flight(d), abap.itineraries(d), abap.bookingsOn(d), plan ? flightsOfItems({ plan_ID: plan.ID }) : [],
+    abap.flight(d), listedItineraries(d), abap.bookingsOn(d), plan ? flightsOfItems({ plan_ID: plan.ID }) : [],
     flightsOfItems({ status: 'Rebooked', 'plan.disruption_ID': d.ID })
   ])
   const moved = {} // bookings moved onto each flight, as leg 1 or a further leg

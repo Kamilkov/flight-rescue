@@ -72,7 +72,7 @@ One page for the whole flow, at http://localhost:4004/cockpit/index.html (sign i
 On a phone, `/cockpit/mobile.html` has just the cancel form and one status line (waiting for ABAP, agent working,
 plan waiting for approval, or the error), with a link to this page for the approval.
 
-3. **Booking system:** one dot per seat: the cancelled flight, then a row for each of up to five itineraries (the plan's first) with its flights side by side. The affected passengers are highlighted and move to their new flights as ABAP confirms each booking.
+3. **Booking system:** one dot per seat: the cancelled flight, then a row for each of up to five itineraries (the plan's first) with its flights side by side. The seats are read on every refresh, ABAP's list of itineraries at most every 30 s per disruption. The affected passengers are highlighted and move to their new flights as ABAP confirms each booking.
 
 **Reset demo** starts over. Against ABAP it runs `ZCL_FR_GENERATE_DATA` through the ADT class-run endpoint (developer user on a trial system only), which recopies `/DMO/BOOKING` and rebuilds the demo scenario, and returns the scenario's flight. Against the mock it clears disruptions, plans and the mock's cancellations; restart the app to restore the mock bookings.
 
@@ -209,7 +209,7 @@ npm test
 - `test/traffic.test.mjs`: the trigger rule, the replay on the demo clock and the `TrafficJam` it opens, one replay at a time, a reset during one, Pause, Resume and Step, and the shipped `incident.json`. A short fixture incident and a 20 ms step keep it fast.
 - `test/passenger.test.mjs`: the phone's service: only `passenger` reads and accepts, no offer before **Send offers**, Accept moves the booking once, ABAP's refusal comes back as the offer's answer, and a closed jam takes no answers.
 - `test/itineraries.test.mjs`: the graph's rules as a plain search (the leg limit, no airport twice, ranking, the window and layovers) and `rebookItinerary`'s checks.
-- `test/reroute.test.mjs`: a cancellation over itineraries against the mock: impact with held seats per leg, plans checked per flight, approval through `rebookItinerary`, `NOT_FLYING` after a leg was cancelled, the board.
+- `test/reroute.test.mjs`: a cancellation over itineraries against the mock: impact with held seats per leg, plans checked per flight, approval through `rebookItinerary`, `NOT_FLYING` after a leg was cancelled, the board and how often it asks ABAP for itineraries.
 
 **Verified on 2026-09-30** against an ABAP Platform Trial (A4H, release 816, package `$ZFLIGHT_RESCUE`) with `claude-opus-5-5`: all objects active, 13,144 bookings generated, binding published. Through the chat preview, an approved plan moved 3 bookings from UA 0926 to UA 0058 on 2027-02-28 (seats booked 3 → 0 and 0 → 3 in `ZI_FR_Flight`); a rejected plan for NQ 0802 changed nothing. Called directly, the action refused with `STALE`, `NO_FLIGHT`, `ROUTE` and `NO_BOOKING`. Not exercised against ABAP: `CANCELLED` and `FULL` (the generated data has no cancelled booking and no full flight), a partially applied plan, and a BTP ABAP environment with a communication arrangement. The tests use a scripted model and the mock.
 

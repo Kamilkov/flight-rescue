@@ -212,4 +212,15 @@ describe('the seat board of an itinerary cancellation', () => {
     assert.deepEqual(after.filter(f => f.connectionId === '0365').map(f => f.highlighted), [4, 4], 'DL 0365 in two rows, the same four bookings')
     assert.equal(after.length, 9)
   })
+
+  test('two reads within 30 s ask ABAP for the itineraries once; the seats are read each time', async () => {
+    const ID = await cancel('LH', '0454', D)
+    let reads = 0
+    mock().before('READ', 'Itineraries', () => { reads++ })
+    const seatsOnDE = async () => ok(await get(`flightBoard(disruption=${ID})`)).value.find(f => f.itinerary === 'DE 2096 2026-10-27').seatsFree
+    assert.equal(await seatsOnDE(), 2)
+    await action('rebook', '90000201', '0001', { ...FROM, CarrierId: 'DE', ConnectionId: '2096', FlightDate: D })
+    assert.equal(await seatsOnDE(), 1)
+    assert.equal(reads, 1)
+  })
 })
