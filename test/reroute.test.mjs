@@ -1,6 +1,8 @@
 // Rerouting a cancellation over itineraries: the mock's Itineraries and rebookItinerary, the impact the agent sees, the
 // plan's checks per flight, the multi-leg approval and the board. The scenario: LH 0454 FRA→SFO on 2026-10-27, with
-// 9 bookings in travels 90000201 (4), 90000202 (3) and 90000203 (2). ZFR_REBOOK mocked, scripted model.
+// 9 bookings in travels 90000201 (4), 90000202 (3) and 90000203 (2). For three flights: DE 2276 FRA→HAV on 2026-11-03,
+// whose only itinerary is LH 0400 › AA 2933 › AA 0029, with booking 90000301/0001 (0002 is its return flight).
+// ZFR_REBOOK mocked, scripted model.
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
@@ -21,7 +23,7 @@ const dispatcher = new cds.User({ id: 'dispatcher', roles: ['Dispatcher'] })
 const agentTool = (name, data) => cds.services.RebookAgentService.tx({ user: dispatcher }, tx => tx.send(name, data))
 const rpc = (method, params) => srv.post('/a2a/rebook-agent', { jsonrpc: '2.0', id: randomUUID(), method, params }, as('dispatcher'))
 const message = (parts, extra = {}) => ({ message: { kind: 'message', role: 'user', messageId: randomUUID(), parts, ...extra } })
-const ask = () => rpc('message/send', message([{ kind: 'text', text: 'LH 0454 on 2026-10-27 is cancelled. Rebook the passengers.' }])).then(r => r.data?.result)
+const ask = (text = 'LH 0454 on 2026-10-27 is cancelled. Rebook the passengers.') => rpc('message/send', message([{ kind: 'text', text }])).then(r => r.data?.result)
 const approve = t => rpc('message/send', message([{ kind: 'text', text: 'approve' }], { taskId: t.id, contextId: t.contextId })).then(r => r.data?.result)
 const paused = t => { assert.equal(t?.status?.state, 'input-required', JSON.stringify(t?.status)); return t.status.message.metadata['sap.cds.agents.hitl'].actionRequests[0] }
 const until = async (fn, ms = 20000) => {
@@ -186,6 +188,23 @@ describe('approving a plan of itineraries', () => {
     assert.equal((await SELECT.one.from('fr.Plans', req.args.plan)).status, 'PartiallyApplied')
     assert.deepEqual((await travel('90000201')).map(b => `${b.BookingId} ${b.CarrierId} ${b.ConnectionId}`),
       ['0001 DE 2096', '0002 DE 2096', '0003 UA 0059', '0004 LH 0454'], 'the refused itinerary left no booking behind')
+  })
+
+  test('three flights: the booking moves to the first at its price; the second and third join its travel after its last booking, at price 0', async () => {
+    const ID = await cancel('DE', '2276', '2026-11-03')
+    const path = [['LH', '0400', '2026-11-03'], ['AA', '2933', '2026-11-03'], ['AA', '0029', '2026-11-04']]
+    const seats = () => Promise.all(path.map(f => free(...f)))
+    const before = await seats()
+    globalThis.FR_LLM = { disruption: ID, assignments: [{ travelId: '90000301', bookingId: '0001', itinerary: 'LH 0400 2026-11-03 > AA 2933 2026-11-03 > AA 0029 2026-11-04' }] }
+    const t = await ask('DE 2276 on 2026-11-03 is cancelled. Rebook the passengers.'), req = paused(t)
+    assert.equal((await approve(t)).status.state, 'completed')
+    const items = await SELECT.from('fr.PlanItems').where({ plan_ID: req.args.plan })
+    assert.deepEqual(items.map(i => [`${i.travelId}/${i.bookingId}`, i.status, i.message]),
+      [['90000301/0001', 'Rebooked', 'Moved to LH 0400 2026-11-03 › AA 2933 2026-11-03 › AA 0029 2026-11-04.']])
+    assert.deepEqual((await travel('90000301')).map(b => `${b.BookingId} ${b.CarrierId} ${b.ConnectionId} ${b.FlightDate} ${Number(b.FlightPrice)} ${b.BookingStatus}`), [
+      '0001 LH 0400 2026-11-03 1180 B', '0002 DE 2277 2026-11-10 1180 B', '0003 AA 2933 2026-11-03 0 B', '0004 AA 0029 2026-11-04 0 B'
+    ], 'the new bookings follow the travel\'s last one, the return flight')
+    assert.deepEqual(await seats(), before.map(n => n - 1))
   })
 })
 
