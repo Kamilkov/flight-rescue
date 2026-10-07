@@ -260,6 +260,43 @@ describe('cockpit logic', () => {
     assert.deepEqual(logic.groupPlan(undefined), [])
   })
 
+  test('an itinerary\'s items group by all their flights, labelled with them and the first one\'s day', () => {
+    const item = (bookingId, toConnectionId, legs, status = 'Planned') => ({ travelId: '90000202', bookingId, toCarrierId: 'LH', toConnectionId, toFlightDate: '2026-10-22', legs, status, message: null })
+    const viaDL = [{ legNo: 2, carrierId: 'DL', connectionId: '0365', flightDate: '2026-10-22' }]
+    assert.deepEqual(logic.groupPlan([item('0001', '0400', viaDL, 'Rebooked'), item('0002', '0454', []), item('0003', '0400', viaDL)]), [
+      { label: 'LH 0400 › DL 0365 · 22 Oct', count: 2, rebooked: 1, waiting: 0, failed: [] },
+      { label: 'LH 0454 · 22 Oct', count: 1, rebooked: 0, waiting: 0, failed: [] }
+    ])
+  })
+
+  test('the board groups into the disrupted flight and itineraries with their legs side by side', () => {
+    const f = (carrierId, connectionId, airportFrom, airportTo, arrivalTime, seatsFree, extra = {}) => ({ carrierId, connectionId, flightDate: '2026-10-22',
+      airportFrom, airportTo, arrivalTime, seatsMax: 200, seatsBooked: 200 - seatsFree, seatsFree, cancelled: false, affected: false, highlighted: 0, held: 0, itinerary: null, legNo: null, ...extra })
+    const via = 'LH 0400 2026-10-22 > B6 0415 2026-10-22'
+    const groups = logic.boardGroups([
+      f('LH', '0454', 'FRA', 'SFO', '12:40:00', 155, { cancelled: true, highlighted: 9 }),
+      f('DE', '2096', 'FRA', 'SFO', '14:30:00', 2, { itinerary: 'DE 2096 2026-10-22', legNo: 1 }),
+      f('LH', '0400', 'FRA', 'JFK', '13:35:00', 3, { itinerary: via, legNo: 1 }),
+      f('B6', '0415', 'JFK', 'SFO', '19:13:00', 1, { itinerary: via, legNo: 2 })
+    ])
+    assert.deepEqual(groups.map(g => [g.name, g.when, g.note, g.state, g.legs.map(l => l.label)]), [
+      ['LH 0454', '22 Oct', 'cancelled', 'Error', ['']],
+      ['DE 2096', '22 Oct', '2 free', 'Success', ['']],
+      ['FRA→JFK→SFO', '22 Oct · arr 19:13', '1 seat', 'Success', ['LH 0400 · 3 free', 'B6 0415 · 1 free']]
+    ])
+    const jam = logic.boardGroups([f('DL', '0107', 'FRA', 'JFK', '14:46:00', 0, { held: 2, departureTime: '08:30:00' }), f('LH', '0404', 'FRA', 'JFK', '20:05:00', 3)])
+    assert.deepEqual(jam.map(g => [g.name, g.when, g.note, g.state]), [['DL 0107', '22 Oct · 08:30', '2 offered, none free', 'Information'], ['LH 0404', '22 Oct', '3 free', 'Success']],
+      'a jam board: each flight on its own, its offered seats out of the free ones')
+    assert.deepEqual(logic.boardGroups(undefined), [])
+  })
+
+  test('the cancel form\'s presets: the demo flight and the itinerary scenario\'s', () => {
+    assert.deepEqual(logic.presets({ carrierId: 'LH', connectionId: '0402', flightDate: '2026-10-20', itineraryFlight: { carrierId: 'LH', connectionId: '0454', flightDate: '2026-10-22' } }), [
+      { label: 'Demo: LH 0402 · 20 Oct', flight: { carrierId: 'LH', connectionId: '0402', flightDate: '2026-10-20' } },
+      { label: 'Itinerary: LH 0454 · 22 Oct', flight: { carrierId: 'LH', connectionId: '0454', flightDate: '2026-10-22' } }])
+    assert.deepEqual(logic.presets({ backend: 'abap' }), [], 'ABAP after a restart: no demo flight known yet')
+  })
+
   test('the card title follows the plan', () => {
     assert.equal(logic.planTitle('Pending', true), 'Plan needs approval')
     assert.equal(logic.planTitle('Pending', false), 'Plan not applied')
@@ -365,6 +402,9 @@ describe('cockpit logic', () => {
     assert.equal(logic.seatSize([load(380, 0, 0)], 600, 2000), 7, 'a narrow pane: the width runs out first, (600 - the label column) / 66.1')
     assert.equal(logic.seatSize([load(380, 0, 0)], 3000, 3000), 12, 'never larger than 12')
     assert.equal(logic.seatSize([], 900, 640), 5, 'no flights: the default')
+    const two = { legs: [load(380, 0, 0), load(380, 0, 0)] }
+    assert.equal(logic.seatSize([two], 900, 2000), 5.5, 'an itinerary\'s legs side by side: (900 - the label column - 12) / 132.2')
+    assert.equal(logic.seatSize([two, { legs: [load(380, 0, 0)] }], 2000, 300), 6, 'its leg line counts in the height: (300 - 8 - 20) / 44.2')
   })
 
   test('a flight\'s departure for the seat board', () => {

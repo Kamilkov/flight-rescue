@@ -22,7 +22,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       this.model = new JSONModel({
         backend: '', busy: false, busyText: '', waiting: '', agentBusy: '', errors: { disruption: '', agent: '', board: '' },
         form: { carrierId: '', connectionId: '', flightDate: '', reason: 'Aircraft technical issue' },
-        disruptions: [], disruption: null, board: [], replay: jam(null), show: logic.demoMode(location.search), ...conversation()
+        presets: [], disruptions: [], disruption: null, board: [], replay: jam(null), show: logic.demoMode(location.search), ...conversation()
       })
       this.getView().setModel(this.model)
       this.refresh = logic.serial(this.refresh.bind(this)) // the polls during an approval must not overlap
@@ -62,6 +62,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
 
     demo(info) {
       this.set('/backend', info.backend)
+      this.set('/presets', logic.presets(info))
       if (info.carrierId) this.set('/form', { ...this.get('/form'), carrierId: info.carrierId, connectionId: info.connectionId, flightDate: info.flightDate })
     },
 
@@ -108,11 +109,11 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       const d = this.get('/disruption'), planID = this.get('/planID')
       try {
         const board = d ? (await control(`flightBoard(disruption=${d.ID})`)).value : []
-        this.set('/board', board.map(f => ({ ...f, name: `${f.carrierId} ${f.connectionId}`, when: logic.flightWhen(f), note: logic.note(f), free: logic.dots(f).free })))
+        this.set('/board', logic.boardGroups(board))
         this.fitBoard()
         this.set('/errors/board', '')
         if (planID) {
-          const p = await control(`Plans(${planID})?$expand=items`), groups = logic.groupPlan(p.items)
+          const p = await control(`Plans(${planID})?$expand=items($expand=legs)`), groups = logic.groupPlan(p.items)
           const waiting = p.status === 'Pending' && !!this.get('/task')
           this.set('/plan', {
             title: logic.planTitle(p.status, waiting), waiting, rationale: p.rationale, groups,
@@ -164,7 +165,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       this.set('/task', r.plan ? task : null)
       if (r.plan) {
         this.set('/planID', r.plan)
-        this.set('/affected', this.get('/board').find(f => f.cancelled || f.affected)?.highlighted ?? 0)
+        this.set('/affected', this.get('/board').flatMap(g => g.legs).find(f => f.cancelled || f.affected)?.highlighted ?? 0)
       }
       if (r.failed) this.set('/errors/agent', r.text || `The agent stopped (${r.state}).`)
       else if (r.text) this.say('agent', r.text)
@@ -179,6 +180,11 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
         this.expected = { ...f, since: Date.now() }
         this.set('/waiting', logic.waiting(null, 0).text)
       })
+    },
+
+    // A preset fills the cancel form; the dispatcher still presses Cancel.
+    onPreset(event) {
+      this.set('/form', { ...this.get('/form'), ...event.getSource().getBindingContext().getObject().flight })
     },
 
     onReplay() {

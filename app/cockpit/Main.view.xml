@@ -32,6 +32,9 @@
           <DatePicker id="date" value="{/form/flightDate}" valueFormat="yyyy-MM-dd" displayFormat="d MMM yyyy"/>
           <Label text="Reason" labelFor="reason"/>
           <Input id="reason" value="{/form/reason}" maxLength="100"/>
+          <HBox items="{/presets}" wrap="Wrap" class="frPresets" renderType="Bare">
+            <Link text="{label}" press=".onPreset" enabled="{= !${/busy} }"/>
+          </HBox>
           <Button text="Cancel flight in ABAP" type="Emphasized" press=".onCancel" enabled="{= !${/busy} }"/>
         </VBox>
         <Button text="Replay traffic incident" visible="{/show/traffic}" press=".onReplay" enabled="{= !${/busy} &amp;&amp; !${/replay/running} &amp;&amp; !${/replay/clock} }"/>
@@ -119,9 +122,15 @@
             <VBox class="frFlightInfo" renderType="Bare">
               <Text class="frStrong" text="{name}"/>
               <Text class="frMuted" text="{when}"/>
-              <ObjectStatus text="{note}" state="{= ${cancelled} ? 'Error' : ${affected} ? 'Warning' : ${free} > 0 ? 'Success' : ${held} > 0 ? 'Information' : 'None' }"/>
+              <ObjectStatus text="{note}" state="{state}"/>
             </VBox>
-            <fr:SeatMap seatsMax="{seatsMax}" seatsBooked="{seatsBooked}" highlighted="{highlighted}" held="{held}" cancelled="{cancelled}" seed="{carrierId}{connectionId}{flightDate}"/>
+            <!-- An itinerary's legs side by side, each under its flight; a flight shared by itineraries shows in each of their rows. -->
+            <HBox items="{path: 'legs', templateShareable: false}" class="frLegs" renderType="Bare">
+              <VBox class="frLeg" renderType="Bare">
+                <Text class="frMuted" text="{label}" visible="{= !!${label} }"/>
+                <fr:SeatMap seatsMax="{seatsMax}" seatsBooked="{seatsBooked}" highlighted="{highlighted}" held="{held}" cancelled="{cancelled}" seed="{carrierId}{connectionId}{flightDate}"/>
+              </VBox>
+            </HBox>
           </HBox>
         </VBox>
       </VBox>

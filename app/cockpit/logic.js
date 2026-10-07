@@ -6,8 +6,10 @@ sap.ui.define([], () => {
   const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const count = v => Math.max(0, Math.trunc(Number(v)) || 0)
 
+  /** "14 Oct" */
+  const dayLabel = date => `${Number(date.slice(8, 10))} ${MONTHS[Number(date.slice(5, 7)) - 1]}`
   /** "LH 0402 · 14 Oct" */
-  const flightLabel = f => `${f.carrierId} ${f.connectionId} · ${Number(f.flightDate.slice(8, 10))} ${MONTHS[Number(f.flightDate.slice(5, 7)) - 1]}`
+  const flightLabel = f => `${f.carrierId} ${f.connectionId} · ${dayLabel(f.flightDate)}`
 
   /** The status next to a fill map. Its free seats are the dots' (the seats offered come out of the free ones), not ABAP's seatsFree. */
   function note(f) {
@@ -26,7 +28,7 @@ sap.ui.define([], () => {
   }
 
   /** "20 Oct · 10:10": a flight's departure on the seat board. */
-  const flightWhen = f => `${Number(f.flightDate.slice(8, 10))} ${MONTHS[Number(f.flightDate.slice(5, 7)) - 1]}${f.departureTime ? ` · ${f.departureTime.slice(0, 5)}` : ''}`
+  const flightWhen = f => `${dayLabel(f.flightDate)}${f.departureTime ? ` · ${f.departureTime.slice(0, 5)}` : ''}`
 
   /** A flight's cabin for the seat map: seats abreast by size (one aisle up to 200 seats, then two) and each seat's state,
    *  h highlighted, b booked, o offered, f free, with the counts of dots(f). There are no seat numbers in the data, so the
@@ -58,13 +60,20 @@ sap.ui.define([], () => {
     return { w: PLANE.tail + cols + (cols - 1) * PLANE.gap + PLANE.nose + 1, h: column + 2 * PLANE.pad + 2 * PLANE.out, cols, column }
   }
 
-  /** The seat size (px) for the board's planes: the largest at which all of them fit a box of width × height, each beside
-   *  its label column (`label` px) and stacked `gap` px apart. Half pixels keep the seats sharp; 3.5 to 12 keeps them
-   *  readable. ponytail: the label column's own height is ignored; it is lower than any plane down to about 3.5 px. */
-  function seatSize(board, width, height, label = 136, gap = 8) {
-    const planes = board.map(f => { const d = dots(f), max = d.highlighted + d.booked + d.held + d.free; return max > 1 && planeSize(groupsFor(max), max) }).filter(Boolean)
-    if (!planes.length) return 5
-    const fit = Math.min((width - label) / Math.max(...planes.map(p => p.w)), (height - gap * (planes.length - 1)) / planes.reduce((a, p) => a + p.h, 0))
+  /** The seat size (px) for the board's planes: the largest at which all of them fit a box of width × height. A row (a
+   *  flight, or a board row with `legs`) sits beside its label column (`label` px); an itinerary's legs stand side by side
+   *  `legGap` px apart, each under its `legLabel` px line; the rows stack `gap` px apart. Half pixels keep the seats sharp;
+   *  3.5 to 12 keeps them readable. ponytail: the label column's own height is ignored; it is lower than any plane down to
+   *  about 3.5 px. An itinerary too long for the pane even at 3.5 px wraps its last leg (CSS), which this does not count. */
+  function seatSize(board, width, height, label = 136, gap = 8, legGap = 12, legLabel = 20) {
+    const rows = board.map(r => {
+      const legs = r.legs ?? [r]
+      const planes = legs.map(f => { const d = dots(f), max = d.highlighted + d.booked + d.held + d.free; return max > 1 && planeSize(groupsFor(max), max) }).filter(Boolean)
+      return planes.length > 0 && { w: planes.reduce((a, p) => a + p.w, 0), h: Math.max(...planes.map(p => p.h)), x: legGap * (planes.length - 1), y: legs.length > 1 ? legLabel : 0 }
+    }).filter(Boolean)
+    if (!rows.length) return 5
+    const fit = Math.min(...rows.map(r => (width - label - r.x) / r.w),
+      (height - gap * (rows.length - 1) - rows.reduce((a, r) => a + r.y, 0)) / rows.reduce((a, r) => a + r.h, 0))
     return Math.min(12, Math.max(3.5, Math.floor(fit * 2) / 2))
   }
 
@@ -94,12 +103,16 @@ sap.ui.define([], () => {
     }
   }
 
-  /** Plan items by target flight, in order of first appearance, with ABAP's answers. */
+  /** Plan items by where they go, a flight or an itinerary's flights, in order of first appearance, with ABAP's answers.
+   *  An itinerary reads "LH 0400 › B6 0415 · 20 Oct" (its first flight's day). */
   function groupPlan(items) {
     const groups = new Map()
     for (const i of items ?? []) {
-      const key = `${i.toCarrierId} ${i.toConnectionId} ${i.toFlightDate}`
-      if (!groups.has(key)) groups.set(key, { label: flightLabel({ carrierId: i.toCarrierId, connectionId: i.toConnectionId, flightDate: i.toFlightDate }), count: 0, rebooked: 0, waiting: 0, failed: [] })
+      const flights = [{ carrierId: i.toCarrierId, connectionId: i.toConnectionId, flightDate: i.toFlightDate },
+        ...[...(i.legs ?? [])].sort((a, b) => a.legNo - b.legNo)]
+      const key = flights.map(f => `${f.carrierId} ${f.connectionId} ${f.flightDate}`).join(' > ')
+      const label = flights.length > 1 ? `${flights.map(f => `${f.carrierId} ${f.connectionId}`).join(' › ')} · ${dayLabel(flights[0].flightDate)}` : flightLabel(flights[0])
+      if (!groups.has(key)) groups.set(key, { label, count: 0, rebooked: 0, waiting: 0, failed: [] })
       const g = groups.get(key)
       g.count++
       if (i.status === 'Rebooked') g.rebooked++
@@ -108,6 +121,33 @@ sap.ui.define([], () => {
     }
     return [...groups.values()]
   }
+
+  /** The board for the page, a row each: the cancelled or jammed flight on its own, then each itinerary with its legs side
+   *  by side, in the server's order. A one-flight row reads like a flight ("DE 2096", "27 Oct · 14:30", "2 free"); an
+   *  itinerary like "FRA→JFK→SFO", "27 Oct · arr 19:13", "1 seat", each leg "LH 0400 · 3 free". Free seats are the dots'. */
+  function boardGroups(board) {
+    const groups = []
+    for (const f of board ?? []) {
+      const last = groups.at(-1)
+      if (f.itinerary && last?.itinerary === f.itinerary) last.legs.push(f)
+      else groups.push({ itinerary: f.itinerary ?? null, legs: [f] })
+    }
+    return groups.map(({ legs }) => {
+      const [first] = legs, seats = Math.min(...legs.map(l => dots(l).free))
+      if (legs.length === 1) return { name: `${first.carrierId} ${first.connectionId}`, when: flightWhen(first), note: note(first), legs: [{ ...first, label: '' }],
+        state: first.cancelled ? 'Error' : first.affected ? 'Warning' : seats > 0 ? 'Success' : count(first.held) > 0 ? 'Information' : 'None' }
+      return {
+        name: [first.airportFrom, ...legs.map(l => l.airportTo)].join('→'),
+        when: `${dayLabel(first.flightDate)} · arr ${String(legs.at(-1).arrivalTime).slice(0, 5)}`,
+        note: seats ? `${seats} ${seats === 1 ? 'seat' : 'seats'}` : 'full', state: seats ? 'Success' : 'None',
+        legs: legs.map(l => ({ ...l, label: `${l.carrierId} ${l.connectionId} · ${note(l)}` }))
+      }
+    })
+  }
+
+  /** The cancel form's presets: the demo's flight and the itinerary scenario's flight, as far as the backend names them. */
+  const presets = info => [['Demo', info], ['Itinerary', info?.itineraryFlight]].filter(([, f]) => f?.carrierId)
+    .map(([kind, f]) => ({ label: `${kind}: ${flightLabel(f)}`, flight: { carrierId: f.carrierId, connectionId: f.connectionId, flightDate: f.flightDate } }))
 
   const TITLES = { Applying: 'Applying the plan', Applied: 'Plan applied', PartiallyApplied: 'Plan partially applied', Failed: 'Plan failed', Superseded: 'Plan superseded', Offered: 'Offers sent' }
   /** The plan card's title. `waiting`: the agent is paused on this plan. */
@@ -298,5 +338,5 @@ sap.ui.define([], () => {
     }
   }
 
-  return { flightLabel, flightWhen, note, dots, cabin, PLANE, planeSize, seatSize, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick, mobileStatus, disruptionLabel, disruptionRoute, chart, chartSvg, replayView, replayError, demoMode, baseMap: BASE_MAP }
+  return { flightLabel, flightWhen, note, dots, cabin, PLANE, planeSize, seatSize, flightInput, groupPlan, boardGroups, presets, planTitle, reading, html, serial, agentView, waiting, pick, mobileStatus, disruptionLabel, disruptionRoute, chart, chartSvg, replayView, replayError, demoMode, baseMap: BASE_MAP }
 })
