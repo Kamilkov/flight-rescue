@@ -1,5 +1,6 @@
-// Live check against the deployed app. Exit code 0: passed (and cleaned up); 1: failed; 2: passed, but shared state was
-// left behind (the output says what).
+// Live check against the deployed app. Exit code 0: passed; 1: failed; 2: passed, but the clean-up failed (the output
+// says what). cancellation and traffic leave their scenario in place, as a presenter finds it (Reset demo clears it);
+// itinerary cleans up after itself.
 //   cancellation (default): resets the demo, cancels its flight in ABAP, and waits for ABAP's event and the paused agent.
 //   traffic: resets the demo, replays the traffic incident, approves the agent's offers as the dispatcher, accepts the
 //            phone booking's offer as the passenger, and expects that booking on its new flight.
