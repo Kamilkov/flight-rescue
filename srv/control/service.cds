@@ -17,7 +17,7 @@ service ControlService {
   /** Close a disruption; its Pending plan is superseded and can no longer be approved. */
   action closeDisruption(disruption : UUID) returns Disruptions;
 
-  /** Every flight of the disruption's route and window with its seats, read from the booking system. Changes nothing. */
+  /** The disruption's seat board, read from the booking system: for a cancellation the cancelled flight, then the legs of up to 5 itineraries (the plan's first); for a traffic jam its flights and the later ones. Changes nothing. */
   function flightBoard(disruption : UUID) returns many fr.FlightLoad;
 
   /** Whether the booking system is ABAP or the mock, and the demo scenario's flight. */

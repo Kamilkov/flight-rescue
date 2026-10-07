@@ -111,7 +111,7 @@ type OfferResult {
   message : String;
 }
 
-/** One flight of a disruption's route and window, for the cockpit's fill map. */
+/** One flight of the cockpit's seat board: a cancellation's cancelled flight and the legs of its itineraries (itinerary, legNo), or a traffic jam's flights. */
 type FlightLoad {
   carrierId     : String(3);
   connectionId  : String(4);

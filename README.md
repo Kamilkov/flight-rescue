@@ -25,12 +25,12 @@ The agent has a second trigger, no cancellation needed: a traffic jam on the way
 | Path | Contents |
 |---|---|
 | `abap/` | ABAP sources to create in ADT: table, generator class, CDS views, behavior, service definition |
-| `srv/external/` | The ZFR_REBOOK contract as CDS, and the mock used when no ABAP system is configured (same checks and messages as the ABAP action) |
+| `srv/external/` | The ZFR_REBOOK contract as CDS, and the mock used when no ABAP system is configured (the ABAP actions' checks and messages, except `LOCKED`, `NOT_SAVED` and the seat validation on save, which only ABAP has) |
 | `srv/rebook-agent/` | The `@agent` service. Its doc comment is the system prompt |
 | `srv/control/` | OData service for dispatchers: cancel a flight in ABAP, replay the traffic incident, close a disruption, read plans |
 | `srv/events/` | REST service for the booking system: ABAP reports a cancelled flight here |
 | `srv/lib/agent-start.js` | Starts the agent for a reported cancellation or an opened traffic jam, as the dispatcher on duty |
-| `scripts/live-check.mjs` | Cancels the demo flight on the deployed app and waits for ABAP's event and the agent; `traffic` replays the jam and accepts the offer |
+| `scripts/live-check.mjs` | Live checks against a running app, by mode: `cancellation` (the default: cancels the demo flight on the deployed app and waits for ABAP's event and the agent), `traffic` (replays the traffic incident through to an accepted offer), `itinerary` (cancels the itinerary scenario's flight, approves the plan and checks every booking in ABAP) and `event` (reports a cancellation as ABAP's event handler would) |
 | `scripts/abap-check.mjs` | Checks against the ABAP system itself: the graph against a plain search for every airport pair, the booking actions, and the rollback of a failed change set |
 | `scripts/secrets.mjs`, `scripts/a4h.mjs`, `scripts/public-app.mjs` | Shared by the checks: only the secrets a script needs, the A4H client, and the public app's check and clean-up |
 | `srv/lib/itineraries.js` | The graph's rules as a plain search: the mock's itineraries, and the oracle the live graph is checked against |
@@ -78,7 +78,7 @@ plan waiting for approval, or the error), with a link to this page for the appro
 
 The demo scenario is on FRA–EWR, two weeks after the day the generator runs: LH 0402 with 9 bookings to cancel, and five direct alternatives with 2, 1, 3, 0 and 0 free seats, so on direct flights alone the agent would have to split the passengers and leave some unassigned.
 
-To start it: `npm run watch` against the mock, or `npm start` with the variables of [Connect to your ABAP trial](#connect-to-your-abap-trial). Record at 1440 × 900 or larger: in a smaller window the six maps of the ABAP scenario don't fit and pane 3 scrolls.
+To start it: `npm run watch` against the mock, or `npm start` with the variables of [Connect to your ABAP trial](#connect-to-your-abap-trial). Record at 1440 × 900 or larger: in a smaller window the maps of the ABAP scenario don't fit and pane 3 scrolls.
 
 ## Set up the ABAP side
 
@@ -87,17 +87,17 @@ Create a package (for example `ZFLIGHT_RESCUE`) and add the objects from `abap/`
 | Object | File |
 |---|---|
 | Table `ZFR_BOOKING` | `zfr_booking.tabl.asddls` |
-| Class `ZCL_FR_GENERATE_DATA` | `zcl_fr_generate_data.clas.abap`. Run it with F9: it copies `/DMO/BOOKING` into `ZFR_BOOKING` and adds the demo scenario (about 1,500 bookings) and the traffic scenario (9 on LH 0400, plus fillers on the later flights; [below](#the-abap-event-and-the-vps)), with travel IDs from `90000000`, so nothing writes to `/DMO/` tables |
+| Class `ZCL_FR_GENERATE_DATA` | `zcl_fr_generate_data.clas.abap`. Run it with F9: it copies `/DMO/BOOKING` into `ZFR_BOOKING` and adds the scenarios' bookings with travel IDs from `90000000` (about 1,500 for the demo, 800 for the traffic jam ([below](#the-abap-event-and-the-vps)) and 4,100 on the itinerary scenario's day, most of them fillers that set the free seats), so nothing writes to `/DMO/` tables |
 | CDS views `ZI_FR_FlightLoad`, `ZI_FR_Flight`, `ZR_FR_Booking` | `*.ddls.asddls` |
 | Abstract entity `ZA_FR_RebookTarget` | `za_fr_rebooktarget.ddls.asddls` |
 | CDS views `ZI_FR_FlightTime`, `ZI_FR_GraphFlight`, `ZI_FR_GraphVertex`, `ZI_FR_GraphEdge` | `zi_fr_flighttime.ddls.asddls` and the three `zi_fr_graph*.ddls.asddls`, in this order |
 | Custom entity `ZI_FR_Itinerary` and class `ZCL_FR_ITINERARIES` | `zi_fr_itinerary.ddls.asddls`, `zcl_fr_itineraries.clas.*`. They name each other: activate them together |
 | Abstract entity `ZA_FR_RebookItinerary` | `za_fr_rebookitinerary.ddls.asddls`, before the behavior definition |
-| Behavior definition `ZR_FR_Booking` | `zr_fr_booking.bdef.asbdef`. Use the quick fix to create `ZBP_R_FR_BOOKING`, then paste the local types from `zbp_r_fr_booking.clas.locals_imp.abap` |
+| Behavior definition `ZR_FR_Booking` | `zr_fr_booking.bdef.asbdef`. Use the quick fix to create `ZBP_R_FR_BOOKING`, then paste the local types from `zbp_r_fr_booking.clas.locals_imp.abap` and the ABAP Unit tests from `zbp_r_fr_booking.clas.testclasses.abap` (its test classes include) |
 | Service definition `ZFR_REBOOK` | `zfr_rebook.srvd.srvdsrv` |
 | Service binding `ZFR_REBOOK_O4` | Create it from the service definition: OData V4 - Web API. Then publish it |
 
-The `rebook` action refuses (and reports) when the booking is cancelled, is no longer on the expected flight (`STALE`), or when the target flight doesn't exist, flies another route, or is full. Its texts stay within 50 characters, because `new_message_with_text` fills a single message variable and anything longer is cut. The mock in `srv/external/ZFR_REBOOK.js` uses the same checks and the same messages.
+The `rebook` action refuses (and reports), in this order, when the booking doesn't exist (`NO_BOOKING`), is cancelled (`CANCELLED`) or is no longer on the expected flight (`STALE`), when another request is booking the target flight (`LOCKED`), or when the target flight doesn't exist (`NO_FLIGHT`), is cancelled (`NOT_FLYING`), flies another route (`ROUTE`) or is full (`FULL`). Its texts stay within 50 characters, because `new_message_with_text` fills a single message variable and anything longer is cut. The mock in `srv/external/ZFR_REBOOK.js` has the same checks and messages for both actions, except `LOCKED`, `NOT_SAVED` and the seat validation on save, which exist only in ABAP.
 
 With the vsp MCP server instead of ADT: create the table with `CreateTable` and replace its body with `EditSource`; create the empty class `ZBP_R_FR_BOOKING` before the behavior definition and write its local types with `EditSource` on `/sap/bc/adt/oo/classes/zbp_r_fr_booking/includes/implementations`; run the generator with `POST /sap/bc/adt/oo/classrun/ZCL_FR_GENERATE_DATA`; create the binding with `binding_version: V4`, `binding_category: 1`.
 
@@ -172,7 +172,7 @@ When a flight is cancelled, its passengers are no longer limited to later flight
 - **Booking** is the RAP action `rebookItinerary`:
   - It moves the booking to the first flight and adds a booking for each further flight to its travel, at price 0.
   - It is all or nothing: a failed action fails its OData request, and RAP saves none of it.
-  - Both actions lock the flights they book onto. A validation on save counts every flight's bookings, so neither two requests nor two actions in one change set share a last seat.
+  - `rebook` and `rebookItinerary` lock the flights they book onto. A validation on save counts every flight's bookings, so neither two requests nor two actions in one change set share a last seat.
 - **Checks:**
   - `scripts/abap-check.mjs graph` compares the graph with a plain search (`srv/lib/itineraries.js`) for every pair of airports.
   - `scripts/abap-check.mjs booking` checks the refusals and the rollback of a failed change set.
@@ -184,11 +184,11 @@ Limits:
 - The graph holds flights up to 30 days out. A cancellation more than 27 days out finds only the itineraries within that horizon, and one more than 30 days out finds none.
 - Extra legs cost 0; there is no fare logic.
 - New booking IDs are the travel's highest + 1 without a lock on the travel. Two rebookings into one travel at the same moment can collide, and the second then fails as a whole.
-- The graph is rebuilt on every query: 66,952 edges, the slowest answer 956 ms (2026-10-07; the first call after an activation took 13.5 s).
+- The graph is rebuilt on every query: 66,952 edges, the slowest warm answer 956 ms (2026-10-07; the first call after an activation took 13.5 s).
 - k = 10 can cut options off when many seats are held elsewhere.
 - With three legs at most, SQL joins would do as well. The graph gives ranked best-k results in one call, and the layers keep the leg limit inside the search. In the real data, 14 airport pairs have a four-leg path among their ten earliest: a filter after the search would have lost itineraries there.
 
-**Verified on 2026-10-07** against A4H (release 816, HANA 2.00.087): `abap-check.mjs graph` compared the graph with the plain search for all 56 airport pairs (the 8 airports with flights in the window; VCE has none there), and all 56 matched. The slowest answer was FRA→MIA in 956 ms, and the first call after an activation took 13.5 s. 14 of the pairs have a four-leg path among their ten earliest itineraries (the script lists them). The first itinerary for FRA→HAV has three flights: UA 0043 › AA 2933 › AA 0017 the next morning.
+**Verified on 2026-10-07** against A4H (release 816, HANA 2.00.087): `abap-check.mjs graph` compared the graph with the plain search for all 56 airport pairs (the 8 airports with flights in the window; VCE has none there), and all 56 matched. The slowest warm answer was FRA→MIA in 956 ms, and the first call after an activation took 13.5 s. 14 of the pairs have a four-leg path among their ten earliest itineraries (the script lists them). The first itinerary for FRA→HAV has three flights: UA 0043 › AA 2933 › AA 0017 the next morning.
 
 `abap-check.mjs booking` passed. The refusals `STALE`, `CHAIN`, `LAYOVER` and `FULL` worked, and after a cancellation both actions refuse the cancelled flight with `NOT_FLYING`, while the itineraries no longer list it. Two rebookings into one travel in one change set answered `NOT_SAVED: 90000202/0002 stays where it was.`, and the bookings, the travel's rows and the seats stayed as they were. Two travels after the last seat in one change set were refused at save with `FULL`, and nothing was saved. Of two requests at once, one got the last seat (B6 0415 booked 189 → 190) and the other got `FULL`. One rebooking that goes through moved the booking to LH 0400 at its price and added a booking for DL 0365 to its travel at price 0.
 

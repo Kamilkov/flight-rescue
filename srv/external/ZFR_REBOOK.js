@@ -2,7 +2,8 @@ const cds = require('@sap/cds')
 const { search, check } = require('../lib/itineraries')
 
 // Local stand-in for the ABAP behavior implementation (abap/zbp_r_fr_booking.clas.locals_imp.abap):
-// the same checks, in the same order, with the same messages (at most 50 characters, see there). Used only while ZFR_REBOOK is mocked.
+// the same checks, in the same order, with the same messages (at most 50 characters, see there), except what needs
+// ABAP's locks and save: LOCKED, NOT_SAVED and the seat validation on save exist only there. Used only while ZFR_REBOOK is mocked.
 // Seats are counters here; in ABAP they are derived from ZFR_BOOKING (ZI_FR_Flight).
 // Itineraries come from the search in srv/lib/itineraries.js instead of HANA Graph (ZCL_FR_ITINERARIES).
 // The mock's stand-in for ZCL_FR_FLIGHTCANCEL_EVENTS: reports the cancellation to EventsService in this process.
