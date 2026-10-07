@@ -1,7 +1,7 @@
 const cds = require('@sap/cds')
 
 // The only module that talks to ZFR_REBOOK: the ABAP service, or its mock while ABAP_URL is unset.
-// Reads go through CQL (CAP turns them into OData queries); the rebook action is a bound action call.
+// Reads go through CQL (CAP turns them into OData queries); rebook and rebookItinerary are bound action calls.
 
 const FLIGHT = { CarrierId: /^[A-Z0-9]{2,3}$/, ConnectionId: /^\d{4}$/, FlightDate: /^\d{4}-\d{2}-\d{2}$/ }
 const BOOKING = { TravelId: /^\d{8}$/, BookingId: /^\d{4}$/ }
@@ -66,24 +66,40 @@ async function itineraries(f) {
   return [...byNo.values()]
 }
 
+// Calls a bound action of Bookings: in-process on the mock, or over OData with RAP's namespace in the path.
+async function bound(action, keys, data) {
+  const srv = await api()
+  try {
+    if (!(srv instanceof cds.RemoteService)) return await srv.send({ event: action, entity: srv.entities.Bookings, params: [keys], data })
+    // RAP qualifies bound actions with the binding's namespace, not the CDS service name, so the path is explicit.
+    const ns = cds.env.requires.ZFR_REBOOK.actionNamespace ?? RAP_NAMESPACE
+    return padded(await srv.send({ method: 'POST', path: `/Bookings(TravelId='${keys.TravelId}',BookingId='${keys.BookingId}')/${ns}.${action}`, data }))
+  } catch (e) {
+    throw new Error(messageOf(e))
+  }
+}
+
 /** Moves one booking in ABAP. Resolves with the updated booking or rejects with ABAP's message. */
 async function rebook(booking, from, to) {
   check(booking, BOOKING, 'booking')
   check(to, FLIGHT, 'target flight')
-  const srv = await api()
-  const data = {
+  return bound('rebook', { TravelId: booking.TravelId, BookingId: booking.BookingId }, {
     ExpectedCarrierId: from.CarrierId, ExpectedConnectionId: from.ConnectionId, ExpectedFlightDate: iso(from.FlightDate),
     CarrierId: to.CarrierId, ConnectionId: to.ConnectionId, FlightDate: iso(to.FlightDate)
+  })
+}
+
+/** Moves one booking onto an itinerary of two or three flights in ABAP: the booking to the first, new bookings in its
+ *  travel for the others, all or nothing. Resolves with the moved booking or rejects with ABAP's message. */
+async function rebookItinerary(booking, from, legs) {
+  check(booking, BOOKING, 'booking')
+  legs.forEach((l, i) => check(l, FLIGHT, `leg ${i + 1}`))
+  const data = { ExpectedCarrierId: from.CarrierId, ExpectedConnectionId: from.ConnectionId, ExpectedFlightDate: iso(from.FlightDate) }
+  for (const n of [1, 2, 3]) { // a missing leg goes as ABAP's initial values: no carrier, connection 0000, no date
+    const l = legs[n - 1]
+    Object.assign(data, { [`Leg${n}CarrierId`]: l?.CarrierId ?? '', [`Leg${n}ConnectionId`]: l?.ConnectionId ?? '0000', [`Leg${n}FlightDate`]: l ? iso(l.FlightDate) : null })
   }
-  const keys = { TravelId: booking.TravelId, BookingId: booking.BookingId }
-  try {
-    if (!(srv instanceof cds.RemoteService)) return await srv.send({ event: 'rebook', entity: srv.entities.Bookings, params: [keys], data })
-    // RAP qualifies bound actions with the binding's namespace, not the CDS service name, so the path is explicit.
-    const ns = cds.env.requires.ZFR_REBOOK.actionNamespace ?? RAP_NAMESPACE
-    return padded(await srv.send({ method: 'POST', path: `/Bookings(TravelId='${keys.TravelId}',BookingId='${keys.BookingId}')/${ns}.rebook`, data }))
-  } catch (e) {
-    throw new Error(messageOf(e))
-  }
+  return bound('rebookItinerary', { TravelId: booking.TravelId, BookingId: booking.BookingId }, data)
 }
 
 // ABAP (and the mock over HTTP) answer with an OData error body; keep its text, not the transport wrapper.
@@ -147,4 +163,4 @@ async function resetDemo() {
   return { carrierId: m[1], connectionId: m[2], flightDate: m[3], trafficFlight: t ? { carrierId: t[1], connectionId: t[2], flightDate: t[3] } : null }
 }
 
-module.exports = { flight, bookingsOn, sameRoute, departures, itineraries, rebook, cancelFlight, cancellation, resetMockCancellations, iso, plusDays, padded, connected, resetDemo, MOCK_DEMO, MOCK_TRAFFIC }
+module.exports = { flight, bookingsOn, sameRoute, departures, itineraries, rebook, rebookItinerary, cancelFlight, cancellation, resetMockCancellations, iso, plusDays, padded, connected, resetDemo, MOCK_DEMO, MOCK_TRAFFIC }

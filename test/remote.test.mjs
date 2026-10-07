@@ -93,6 +93,23 @@ describe('over HTTP, as against the ABAP trial', () => {
     }
   })
 
+  test('itineraries: read through $filter, booked through the bound action, two legs and one', async () => {
+    globalThis.FR_LLM = {}
+    const { disruption: ID } = ok(await srv.post('/events/flightCancelled', { carrierId: 'LH', connectionId: '0454', flightDate: '2026-10-27' }, events))
+    const disruption = await until(async () => { const d = await SELECT.one.from('fr.Disruptions', ID); return d.agentStatus !== 'Working' && d })
+    assert.equal(disruption.agentStatus, 'AwaitingApproval', disruption.agentMessage)
+    const t = (await rpc('tasks/get', { id: disruption.agentTask })).data.result
+    const plan = t.status.message.metadata['sap.cds.agents.hitl'].actionRequests[0].args.plan
+    assert.equal((await SELECT.from('fr.PlanItemLegs').where({ 'item.plan_ID': plan })).length, 5, 'five two-leg itineraries, from Itineraries over HTTP')
+    const done = (await rpc('message/send', message([{ kind: 'text', text: 'approve' }], { taskId: t.id, contextId: t.contextId }))).data.result
+    assert.equal(done.status.state, 'completed', JSON.stringify(done.status))
+    const items = await SELECT.from('fr.PlanItems').where({ plan_ID: plan })
+    assert.deepEqual([...new Set(items.map(i => i.status))], ['Rebooked'])
+    const remote = (await abapGet("Bookings?$filter=TravelId eq '90000202'&$orderby=BookingId")).value
+    assert.deepEqual(remote.map(b => `${b.BookingId} ${b.CarrierId} ${b.ConnectionId} ${Number(b.FlightPrice)}`), [
+      '0001 DL 0107 6341', '0002 DL 0107 6341', '0003 LH 0400 6341', '0004 DL 0365 0', '0005 DL 0365 0', '0006 DL 0365 0'], 'the new rows exist remotely')
+  })
+
   test('cancelFlight creates the cancellation remotely; a second one is refused with the booking system\'s message', async () => {
     const c = ok(await srv.post('/odata/v4/control/cancelFlight', { carrierId: 'UA', connectionId: '0941', flightDate: '2026-10-13', reason: 'Crew' }, opts))
     assert.deepEqual([c.carrierId, c.connectionId, c.flightDate, c.reason], ['UA', '0941', '2026-10-13', 'Crew'])

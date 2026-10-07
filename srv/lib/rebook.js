@@ -235,13 +235,16 @@ async function propose(req, { disruption, assignments = [], rationale }, agentTa
     message: `Plan saved as Pending. Nothing changed in the booking system yet.${unassigned.length ? ` ${unassigned.length} booking(s) stay unassigned.` : ''}` }
 }
 
-/** Moves one plan item's booking in ABAP and records ABAP's answer on the item: Rebooked, or Failed with ABAP's message. */
+/** Moves one plan item's booking in ABAP, onto one flight (rebook) or an itinerary (rebookItinerary, all or nothing),
+ *  and records ABAP's answer on the item: Rebooked, or Failed with ABAP's message. */
 async function moveItem(i) {
-  let status = 'Rebooked', message = `Moved to ${flightName({ carrierId: i.toCarrierId, connectionId: i.toConnectionId, flightDate: i.toFlightDate })}.`
+  const legs = [{ carrierId: i.toCarrierId, connectionId: i.toConnectionId, flightDate: i.toFlightDate },
+    ...await SELECT.from('fr.PlanItemLegs').columns('carrierId', 'connectionId', 'flightDate').where({ item_ID: i.ID }).orderBy('legNo')]
+  const flights = legs.map(l => ({ CarrierId: l.carrierId, ConnectionId: l.connectionId, FlightDate: l.flightDate }))
+  const booking = { TravelId: i.travelId, BookingId: i.bookingId }, from = { CarrierId: i.fromCarrierId, ConnectionId: i.fromConnectionId, FlightDate: i.fromFlightDate }
+  let status = 'Rebooked', message = `Moved to ${legs.map(flightName).join(' › ')}.`
   try {
-    await abap.rebook({ TravelId: i.travelId, BookingId: i.bookingId },
-      { CarrierId: i.fromCarrierId, ConnectionId: i.fromConnectionId, FlightDate: i.fromFlightDate },
-      { CarrierId: i.toCarrierId, ConnectionId: i.toConnectionId, FlightDate: i.toFlightDate })
+    await (flights.length > 1 ? abap.rebookItinerary(booking, from, flights) : abap.rebook(booking, from, flights[0]))
   } catch (e) { status = 'Failed'; message = e.message }
   await UPDATE('fr.PlanItems', i.ID).with({ status, message })
   return { status, message }

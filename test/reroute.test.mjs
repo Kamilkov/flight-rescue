@@ -145,3 +145,46 @@ describe('impact and proposals over itineraries', () => {
       [[2, 'DL', '0365', D]])
   })
 })
+
+describe('approving a plan of itineraries', () => {
+  test('two legs go through rebookItinerary, one through rebook; each item is Rebooked with its legs and ABAP has the new bookings', async () => {
+    const ID = await cancel('LH', '0454', D)
+    globalThis.FR_LLM = { disruption: ID }
+    const t = await ask(), req = paused(t)
+    assert.equal(req.name, 'applyRebooking')
+    assert.equal((await approve(t)).status.state, 'completed')
+    const items = await SELECT.from('fr.PlanItems').where({ plan_ID: req.args.plan }).orderBy('travelId', 'bookingId')
+    assert.deepEqual(items.map(i => [`${i.travelId}/${i.bookingId}`, i.status, i.message]), [
+      ['90000201/0001', 'Rebooked', 'Moved to DE 2096 2026-10-27.'],
+      ['90000201/0002', 'Rebooked', 'Moved to DE 2096 2026-10-27.'],
+      ['90000201/0003', 'Rebooked', 'Moved to UA 0059 2026-10-27.'],
+      ['90000201/0004', 'Rebooked', 'Moved to LH 0400 2026-10-27 › B6 0415 2026-10-27.'],
+      ['90000202/0001', 'Rebooked', 'Moved to DL 0107 2026-10-27 › DL 0365 2026-10-27.'],
+      ['90000202/0002', 'Rebooked', 'Moved to DL 0107 2026-10-27 › DL 0365 2026-10-27.'],
+      ['90000202/0003', 'Rebooked', 'Moved to LH 0400 2026-10-27 › DL 0365 2026-10-27.'],
+      ['90000203/0001', 'Rebooked', 'Moved to LH 0400 2026-10-27 › DL 0365 2026-10-27.'],
+      ['90000203/0002', 'Rebooked', 'Moved to DE 2096 2026-10-28.']
+    ], 'the same day takes eight; the ninth goes the next day')
+    assert.equal((await SELECT.one.from('fr.Plans', req.args.plan)).status, 'Applied')
+    assert.deepEqual((await travel('90000202')).map(b => `${b.BookingId} ${b.CarrierId} ${b.ConnectionId} ${Number(b.FlightPrice)}`), [
+      '0001 DL 0107 6341', '0002 DL 0107 6341', '0003 LH 0400 6341', '0004 DL 0365 0', '0005 DL 0365 0', '0006 DL 0365 0'])
+    assert.deepEqual([await free('LH', '0400', D), await free('DL', '0107', D), await free('B6', '0415', D), await free('DL', '0365', D)], [0, 0, 0, 1])
+  })
+
+  test('a booking moved since fails with STALE, a leg cancelled since with NOT_FLYING; the rest is applied', async () => {
+    const ID = await cancel('LH', '0454', D)
+    globalThis.FR_LLM = { disruption: ID }
+    const t = await ask(), req = paused(t)
+    await action('rebook', '90000201', '0001', { ...FROM, CarrierId: 'DE', ConnectionId: '2096', FlightDate: '2026-10-28' })
+    await cancel('B6', '0415', D)
+    assert.equal((await approve(t)).status.state, 'completed')
+    const items = await SELECT.from('fr.PlanItems').where({ plan_ID: req.args.plan }).orderBy('travelId', 'bookingId')
+    assert.deepEqual(items.filter(i => i.status === 'Failed').map(i => [`${i.travelId}/${i.bookingId}`, i.message]), [
+      ['90000201/0001', 'STALE: 90000201/0001 is on DE 2096 2026-10-28.'],
+      ['90000201/0004', 'NOT_FLYING: B6 0415 2026-10-27 is cancelled.']])
+    assert.equal(items.filter(i => i.status === 'Rebooked').length, 7)
+    assert.equal((await SELECT.one.from('fr.Plans', req.args.plan)).status, 'PartiallyApplied')
+    assert.deepEqual((await travel('90000201')).map(b => `${b.BookingId} ${b.CarrierId} ${b.ConnectionId}`),
+      ['0001 DE 2096', '0002 DE 2096', '0003 UA 0059', '0004 LH 0454'], 'the refused itinerary left no booking behind')
+  })
+})
