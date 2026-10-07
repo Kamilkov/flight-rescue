@@ -284,6 +284,15 @@ describe('cockpit logic', () => {
       ['DE 2096', '22 Oct', '2 free', 'Success', ['']],
       ['FRA→JFK→SFO', '22 Oct · arr 19:13', '1 seat', 'Success', ['LH 0400 · 3 free', 'B6 0415 · 1 free']]
     ])
+    const viaMIA = 'LH 0400 2026-10-22 > AA 2933 2026-10-22 > AA 0029 2026-10-23', overnight = 'LH 0400 2026-10-22 > AA 0901 2026-10-22'
+    assert.deepEqual(logic.boardGroups([
+      f('LH', '0400', 'FRA', 'JFK', '12:30:00', 2, { itinerary: viaMIA, legNo: 1, departureTime: '10:10:00' }),
+      f('AA', '2933', 'JFK', 'MIA', '20:10:00', 3, { itinerary: viaMIA, legNo: 2, departureTime: '17:00:00' }),
+      f('AA', '0029', 'MIA', 'HAV', '08:20:00', 4, { itinerary: viaMIA, legNo: 3, departureTime: '07:10:00', flightDate: '2026-10-23' }),
+      f('LH', '0400', 'FRA', 'JFK', '12:30:00', 2, { itinerary: overnight, legNo: 1, departureTime: '10:10:00' }),
+      f('AA', '0901', 'JFK', 'HAV', '06:05:00', 3, { itinerary: overnight, legNo: 2, departureTime: '22:30:00' })
+    ]).map(g => g.when), ['22 Oct · arr 23 Oct 08:20', '22 Oct · arr 23 Oct 06:05'],
+    'landing on a later day: the last flight leaves the next day, or lands before the time it left')
     const jam = logic.boardGroups([f('DL', '0107', 'FRA', 'JFK', '14:46:00', 0, { held: 2, departureTime: '08:30:00' }), f('LH', '0404', 'FRA', 'JFK', '20:05:00', 3)])
     assert.deepEqual(jam.map(g => [g.name, g.when, g.note, g.state]), [['DL 0107', '22 Oct · 08:30', '2 offered, none free', 'Information'], ['LH 0404', '22 Oct', '3 free', 'Success']],
       'a jam board: each flight on its own, its offered seats out of the free ones')

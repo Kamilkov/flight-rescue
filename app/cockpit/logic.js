@@ -122,9 +122,14 @@ sap.ui.define([], () => {
     return [...groups.values()]
   }
 
+  /** The day a flight lands: an arrival time before its departure time is the next day, as in ZI_FR_FlightTime. */
+  const landsOn = f => String(f.arrivalTime) < String(f.departureTime ?? '')
+    ? new Date(Date.parse(`${f.flightDate}T00:00:00Z`) + 864e5).toISOString().slice(0, 10) : f.flightDate
+
   /** The board for the page, a row each: the cancelled or jammed flight on its own, then each itinerary with its legs side
    *  by side, in the server's order. A one-flight row reads like a flight ("DE 2096", "27 Oct · 14:30", "2 free"); an
-   *  itinerary like "FRA→JFK→SFO", "27 Oct · arr 19:13", "1 seat", each leg "LH 0400 · 3 free". Free seats are the dots'. */
+   *  itinerary like "FRA→JFK→SFO", "27 Oct · arr 19:13" ("arr 28 Oct 08:20" when it lands on a later day), "1 seat", each
+   *  leg "LH 0400 · 3 free". Free seats are the dots'. */
   function boardGroups(board) {
     const groups = []
     for (const f of board ?? []) {
@@ -136,9 +141,10 @@ sap.ui.define([], () => {
       const [first] = legs, seats = Math.min(...legs.map(l => dots(l).free))
       if (legs.length === 1) return { name: `${first.carrierId} ${first.connectionId}`, when: flightWhen(first), note: note(first), legs: [{ ...first, label: '' }],
         state: first.cancelled ? 'Error' : first.affected ? 'Warning' : seats > 0 ? 'Success' : count(first.held) > 0 ? 'Information' : 'None' }
+      const last = legs.at(-1), arrives = landsOn(last)
       return {
         name: [first.airportFrom, ...legs.map(l => l.airportTo)].join('→'),
-        when: `${dayLabel(first.flightDate)} · arr ${String(legs.at(-1).arrivalTime).slice(0, 5)}`,
+        when: `${dayLabel(first.flightDate)} · arr ${arrives === first.flightDate ? '' : `${dayLabel(arrives)} `}${String(last.arrivalTime).slice(0, 5)}`,
         note: seats ? `${seats} ${seats === 1 ? 'seat' : 'seats'}` : 'full', state: seats ? 'Success' : 'None',
         legs: legs.map(l => ({ ...l, label: `${l.carrierId} ${l.connectionId} · ${note(l)}` }))
       }
