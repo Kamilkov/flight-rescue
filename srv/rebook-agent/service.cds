@@ -41,11 +41,16 @@ service RebookAgentService {
   @readonly entity PlanItems   as projection on fr.PlanItems;
   @readonly entity PlanItemLegs as projection on fr.PlanItemLegs;
 
-  /** The disruption, its affected bookings and the only valid alternative flights with seatsAvailable. Changes nothing. */
+  /** The disruption, its affected bookings, and the only valid itineraries (Cancellation; their flights in legs) or alternative flights (TrafficJam), with seatsAvailable. Changes nothing. */
   function disruptionImpact(disruption : UUID) returns fr.Impact;
 
   /** Save a Pending rebooking plan for the disruption. Nothing changes in the booking system. */
-  action proposeRebooking(disruption : UUID, assignments : many fr.Assignment, rationale : String) returns fr.ProposalResult;
+  action proposeRebooking(
+    disruption  : UUID,
+    /** Cancellation: travelId, bookingId, itinerary (a listed itinerary's id). TrafficJam: travelId, bookingId, carrierId, connectionId, flightDate (a listed alternative). */
+    assignments : many fr.Assignment,
+    rationale   : String
+  ) returns fr.ProposalResult;
 
   /** Request human approval to run this task's Pending plan in the booking system. Pauses for a dispatcher before it runs. */
   @agent.hitl
