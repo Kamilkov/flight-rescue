@@ -24,6 +24,13 @@ service ZFR_REBOOK {
     /** Moves the booking to another flight on the same route. Refuses if it is no longer on the expected flight. */
     action rebook(ExpectedCarrierId : String(3) not null, ExpectedConnectionId : String(4) not null, ExpectedFlightDate : Date,
                   CarrierId : String(3) not null, ConnectionId : String(4) not null, FlightDate : Date) returns Bookings;
+    /** Moves the booking onto an itinerary: to Leg1*, with new bookings in its travel (price 0) for Leg2* and Leg3*.
+     *  All or nothing. Leg3* is empty for two legs (ABAP's initial values: no carrier, connection 0000, no date), so
+     *  Leg2* and Leg3* are not `not null` here. Refuses if the booking is no longer on the expected flight. */
+    action rebookItinerary(ExpectedCarrierId : String(3) not null, ExpectedConnectionId : String(4) not null, ExpectedFlightDate : Date,
+                           Leg1CarrierId : String(3) not null, Leg1ConnectionId : String(4) not null, Leg1FlightDate : Date,
+                           Leg2CarrierId : String(3), Leg2ConnectionId : String(4), Leg2FlightDate : Date,
+                           Leg3CarrierId : String(3), Leg3ConnectionId : String(4), Leg3FlightDate : Date) returns Bookings;
   }
 
   @readonly
@@ -42,6 +49,29 @@ service ZFR_REBOOK {
         SeatsBooked   : Integer not null;
         SeatsFree     : Integer not null;
         IsCancelled   : Boolean; // a ZFR_FLIGHTCANCEL row exists for the flight
+  }
+
+  /** The ten best itineraries of one to three flights from Origin to Destination, the first flight leaving on FromDate up
+   *  to two days later: one row per leg, ItineraryNo 1 arriving first (ZI_FR_Itinerary; HANA Graph in ZCL_FR_ITINERARIES).
+   *  Origin, Destination and FromDate must be filtered by equality. */
+  @readonly
+  entity Itineraries {
+    key ItineraryNo   : Integer not null;
+    key LegNo         : Integer not null;
+        Origin        : String(3) not null;
+        Destination   : String(3) not null;
+        FromDate      : Date;
+        Legs          : Integer not null;
+        ArrivesOn     : Date;          // at the destination, local
+        ArrivesAt     : Time not null;
+        CarrierId     : String(3) not null;
+        ConnectionId  : String(4) not null;
+        FlightDate    : Date;
+        AirportFrom   : String(3) not null;
+        AirportTo     : String(3) not null;
+        DepartureTime : Time not null;
+        ArrivalTime   : Time not null;
+        SeatsFree     : Integer not null;
   }
 
   /** A flight cancellation (ZR_FR_FlightCancel). Creating one cancels the flight; ABAP then reports it to this app. */

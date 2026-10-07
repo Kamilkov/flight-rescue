@@ -1,5 +1,6 @@
 // The rerouting rules of ABAP's graph (abap/zi_fr_graphedge.ddls.asddls, abap/zcl_fr_itineraries.clas.abap) as a plain
-// search over a list of flights. The mock uses it offline; scripts/abap-check.mjs compares the graph with it live.
+// search over a list of flights, and rebookItinerary's checks (abap/zbp_r_fr_booking.clas.locals_imp.abap). The mock
+// uses both offline; scripts/abap-check.mjs compares the graph with the search live.
 
 const DAY = 86400
 const LAYOVER = { min: 90 * 60, max: 12 * 3600 } // seconds between one flight's arrival and the next one's departure
@@ -47,4 +48,30 @@ function search(flights, { origin, destination, fromDate, k = 10, maxLegs = 3 })
     .map(i => { const at = new Date(i.arrives * 1000).toISOString(); return { ...i, arrivesOn: at.slice(0, 10), arrivesAt: at.slice(11, 19) } })
 }
 
-module.exports = { search, id, timed, LAYOVER, WINDOW_DAYS }
+/** rebookItinerary's checks after the booking's own, in ABAP's order and with ABAP's texts: the legs exist and fly, chain
+ *  from origin to destination without an airport twice, connect in 90 min to 12 h, and have a free seat.
+ *  legs: [{ CarrierId, ConnectionId, FlightDate, row }] in order, row being the flight from Flights or undefined.
+ *  Returns the first problem, or ''. */
+function check(origin, destination, legs) {
+  const name = l => `${l.CarrierId} ${l.ConnectionId} ${iso(l.FlightDate)}`
+  for (const l of legs) if (!l.row) return `NO_FLIGHT: ${name(l)} does not exist.`
+  for (const l of legs) if (l.row.IsCancelled) return `NOT_FLYING: ${name(l)} is cancelled.`
+  for (const [i, l] of legs.entries()) {
+    const from = i ? legs[i - 1].row.AirportTo : origin
+    if (l.row.AirportFrom !== from) return `CHAIN: leg ${i + 1} does not leave from ${from}.`
+  }
+  if (legs.at(-1).row.AirportTo !== destination) return `CHAIN: leg ${legs.length} does not land at ${destination}.`
+  const seen = new Set([origin])
+  for (const l of legs) {
+    if (seen.has(l.row.AirportTo)) return `CHAIN: the itinerary visits ${l.row.AirportTo} twice.`
+    seen.add(l.row.AirportTo)
+  }
+  for (let i = 1; i < legs.length; i++) {
+    const gap = timed(legs[i].row).dep - timed(legs[i - 1].row).arr
+    if (gap < LAYOVER.min || gap > LAYOVER.max) return `LAYOVER: leg ${i + 1} is not 90 min to 12 h after leg ${i}.`
+  }
+  for (const l of legs) if (l.row.SeatsFree <= 0) return `FULL: ${name(l)} has no free seat.`
+  return ''
+}
+
+module.exports = { search, check, id, timed, LAYOVER, WINDOW_DAYS }

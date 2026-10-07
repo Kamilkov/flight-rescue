@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { test } from 'node:test'
-const { search, id } = createRequire(import.meta.url)('../srv/lib/itineraries.js')
+const { search, check, id } = createRequire(import.meta.url)('../srv/lib/itineraries.js')
 
 const DAY = '2026-10-27'
 // A flight as ZFR_REBOOK/Flights returns it: 5 free seats unless given.
@@ -63,4 +63,20 @@ test('the window, 90 min to 12 h between flights, overnight arrivals, full and c
   ]
   assert.deepEqual(ids(find(flights)), ['LH 0400 2026-10-27 > DL 0365 2026-10-27', 'LH 0400 2026-10-27 > AA 0015 2026-10-28',
     'LH 0402 2026-10-29 > DL 0666 2026-10-30'])
+})
+
+test('rebookItinerary checks, in ABAP\'s order and with its texts', () => {
+  const leg = (...a) => { const row = f(...a); return { CarrierId: row.CarrierId, ConnectionId: row.ConnectionId, FlightDate: row.FlightDate, row } }
+  const lh0400 = leg('LH', '0400', 'FRA', 'JFK', '10:55', '13:35'), b6 = leg('B6', '0415', 'JFK', 'SFO', '15:45', '19:13')
+  assert.equal(check('FRA', 'SFO', [lh0400, b6]), '')
+  assert.equal(check('FRA', 'SFO', [lh0400, { ...b6, row: undefined }]), 'NO_FLIGHT: B6 0415 2026-10-27 does not exist.')
+  assert.equal(check('FRA', 'SFO', [b6, leg('UA', '0059', 'FRA', 'SFO', '12:55', '15:15', { IsCancelled: true })]),
+    'NOT_FLYING: UA 0059 2026-10-27 is cancelled.', 'a cancelled leg before a broken chain')
+  assert.equal(check('FRA', 'SFO', [b6]), 'CHAIN: leg 1 does not leave from FRA.')
+  assert.equal(check('FRA', 'SFO', [lh0400, leg('DE', '2096', 'FRA', 'SFO', '15:40', '18:30')]), 'CHAIN: leg 2 does not leave from JFK.')
+  assert.equal(check('FRA', 'SFO', [lh0400, leg('LH', '0401', 'JFK', 'FRA', '15:40', '05:25')]), 'CHAIN: leg 2 does not land at SFO.')
+  assert.equal(check('FRA', 'SFO', [lh0400, leg('LH', '0401', 'JFK', 'FRA', '15:40', '17:25'), leg('LH', '0454', 'FRA', 'SFO', '19:00', '21:15')]),
+    'CHAIN: the itinerary visits FRA twice.')
+  assert.equal(check('FRA', 'SFO', [lh0400, leg('B6', '0415', 'JFK', 'SFO', '15:04', '19:13')]), 'LAYOVER: leg 2 is not 90 min to 12 h after leg 1.')
+  assert.equal(check('FRA', 'SFO', [lh0400, leg('B6', '0415', 'JFK', 'SFO', '15:45', '19:13', { SeatsFree: 0 })]), 'FULL: B6 0415 2026-10-27 has no free seat.')
 })
