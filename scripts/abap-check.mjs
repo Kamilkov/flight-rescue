@@ -84,7 +84,7 @@ function changeSet(calls) {
     'Content-Type: application/json', 'Accept: application/json', '', JSON.stringify(body)].join(crlf))
   const body = [`--batch_${boundary}`, `Content-Type: multipart/mixed; boundary=changeset_${boundary}`, '', ...parts,
     `--changeset_${boundary}--`, `--batch_${boundary}--`, ''].join(crlf)
-  return post('$batch', body, { 'content-type': `multipart/mixed; boundary=batch_${boundary}` })
+  return post('$batch', body, { 'content-type': `multipart/mixed; boundary=batch_${boundary}`, accept: 'multipart/mixed' })
 }
 
 async function booking() {
