@@ -56,6 +56,16 @@ async function departures(airport, date) {
   return (await (await api()).run(SELECT.from(Flights).where({ AirportFrom: airport, FlightDate: iso(date) }).orderBy('DepartureTime'))).map(padded)
 }
 
+/** The graph's best itineraries from the flight's origin to its destination, the first flight leaving on its day up to
+ *  two days later (ZFR_REBOOK/Itineraries): each a list of leg rows in order, as ABAP ranks them, earliest arrival first. */
+async function itineraries(f) {
+  const srv = await api()
+  const rows = (await srv.run(SELECT.from(srv.entities.Itineraries).where({ Origin: f.airportFrom, Destination: f.airportTo, FromDate: iso(f.flightDate) }))).map(padded)
+  const byNo = new Map()
+  for (const r of rows.sort((a, b) => a.ItineraryNo - b.ItineraryNo || a.LegNo - b.LegNo)) byNo.set(r.ItineraryNo, [...(byNo.get(r.ItineraryNo) ?? []), r])
+  return [...byNo.values()]
+}
+
 /** Moves one booking in ABAP. Resolves with the updated booking or rejects with ABAP's message. */
 async function rebook(booking, from, to) {
   check(booking, BOOKING, 'booking')
@@ -137,4 +147,4 @@ async function resetDemo() {
   return { carrierId: m[1], connectionId: m[2], flightDate: m[3], trafficFlight: t ? { carrierId: t[1], connectionId: t[2], flightDate: t[3] } : null }
 }
 
-module.exports = { flight, bookingsOn, sameRoute, departures, rebook, cancelFlight, cancellation, resetMockCancellations, iso, plusDays, padded, connected, resetDemo, MOCK_DEMO, MOCK_TRAFFIC }
+module.exports = { flight, bookingsOn, sameRoute, departures, itineraries, rebook, cancelFlight, cancellation, resetMockCancellations, iso, plusDays, padded, connected, resetDemo, MOCK_DEMO, MOCK_TRAFFIC }

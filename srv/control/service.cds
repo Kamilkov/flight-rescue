@@ -8,6 +8,7 @@ service ControlService {
   @readonly entity Disruptions as projection on fr.Disruptions;
   @readonly entity Plans       as projection on fr.Plans;
   @readonly entity PlanItems   as projection on fr.PlanItems;
+  @readonly entity PlanItemLegs as projection on fr.PlanItemLegs;
 
   /** Cancel a flight in the booking system. ABAP then reports it to this app, which opens the disruption and starts the agent. */
   action cancelFlight(carrierId : String(3), connectionId : String(4), flightDate : Date, reason : String(100)) returns fr.Cancellation;

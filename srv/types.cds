@@ -1,8 +1,10 @@
 namespace fr;
 
+/** Cancellation: the booking and a listed itinerary's id. Traffic jam: the booking and the offered flight. */
 type Assignment {
   travelId     : String(8);
   bookingId    : String(4);
+  itinerary    : String;
   carrierId    : String(3);
   connectionId : String(4);
   flightDate   : Date;
@@ -37,7 +39,33 @@ type Impact {
     connectionId : String(4);
     flightDate   : Date;
   };
-  /** forFlight: the affected flight ("LH 0400 2026-10-20") this alternative is for. */
+  /** Cancellation: the only valid itineraries, earliest arrival first. id: its flights ("LH 0400 2026-10-20 > B6 0415
+   *  2026-10-20"); route: its airports; seatsAvailable: the fewest of its legs; forFlight: the cancelled flight. */
+  itineraries      : many {
+    id             : String;
+    route          : String;
+    arrivesOn      : Date;
+    arrivesAt      : Time;
+    connections    : Integer;
+    seatsAvailable : Integer;
+    forFlight      : String;
+  };
+  /** The itineraries' flights, one row per itinerary and leg. A flight shared by itineraries has the same seats in each. */
+  legs             : many {
+    itinerary      : String;
+    legNo          : Integer;
+    carrierId      : String(3);
+    connectionId   : String(4);
+    flightDate     : Date;
+    airportFrom    : String(3);
+    airportTo      : String(3);
+    departureTime  : Time;
+    arrivalTime    : Time;
+    seatsFree      : Integer;
+    seatsHeld      : Integer;
+    seatsAvailable : Integer;
+  };
+  /** Traffic jam: forFlight: the affected flight ("LH 0400 2026-10-20") this alternative is for. */
   alternatives     : many {
     carrierId      : String(3);
     connectionId   : String(4);
@@ -50,7 +78,7 @@ type Impact {
     seatsAvailable : Integer;
     forFlight      : String;
   };
-  seatsAvailable   : Integer;
+  seatsAvailable   : Integer; // the sum over alternatives or itineraries: an upper bound when itineraries share a flight
   note             : String;
 }
 

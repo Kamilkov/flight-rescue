@@ -104,3 +104,44 @@ describe('the mock booking system', () => {
     assert.deepEqual(await travel('90000201'), before)
   })
 })
+
+describe('impact and proposals over itineraries', () => {
+  test('itineraries with their legs, seats held by other plans on any leg, and a note that they share flights', async () => {
+    const other = await cancel('LH', '0400', '2026-10-12')
+    // A pending plan of another disruption: LH 0400 on 10-27 as leg 1, DL 0365 as leg 2.
+    await INSERT.into('fr.Plans').entries({ ID: randomUUID(), disruption_ID: other, status: 'Pending', items: [{
+      travelId: '00000101', bookingId: '0001', fromCarrierId: 'LH', fromConnectionId: '0400', fromFlightDate: '2026-10-12',
+      toCarrierId: 'LH', toConnectionId: '0400', toFlightDate: D, legs: [{ legNo: 2, carrierId: 'DL', connectionId: '0365', flightDate: D }] }] })
+    const ID = await cancel('LH', '0454', D)
+    const impact = await agentTool('disruptionImpact', { disruption: ID })
+    assert.equal(impact.affectedBookings.length, 9)
+    assert.deepEqual(impact.itineraries.map(i => [i.id, i.route, i.arrivesOn, i.arrivesAt, i.connections, i.seatsAvailable]), [
+      ['DE 2096 2026-10-27', 'FRA→SFO', D, '14:30:00', 0, 2],
+      ['UA 0059 2026-10-27', 'FRA→SFO', D, '15:15:00', 0, 1],
+      ['LH 0400 2026-10-27 > B6 0415 2026-10-27', 'FRA→JFK→SFO', D, '19:13:00', 1, 1],
+      ['DL 0107 2026-10-27 > DL 0365 2026-10-27', 'FRA→JFK→SFO', D, '19:54:00', 1, 2],
+      ['LH 0400 2026-10-27 > DL 0365 2026-10-27', 'FRA→JFK→SFO', D, '19:54:00', 1, 2],
+      ['DE 2096 2026-10-28', 'FRA→SFO', '2026-10-28', '14:30:00', 0, 10]])
+    assert.deepEqual(impact.legs.filter(l => l.connectionId === '0365').map(l => [l.itinerary, l.legNo, l.seatsFree, l.seatsHeld, l.seatsAvailable]), [
+      ['DL 0107 2026-10-27 > DL 0365 2026-10-27', 2, 5, 1, 4], ['LH 0400 2026-10-27 > DL 0365 2026-10-27', 2, 5, 1, 4]])
+    assert.match(impact.note, /^9 bookings, 6 itineraries .* Itineraries share flights/)
+  })
+
+  test('a plan names listed itineraries; another flight\'s itinerary and a shared flight overfilled are refused', async () => {
+    await cancel('LH', '0400', '2026-10-12')
+    const ID = await cancel('LH', '0454', D)
+    const propose = assignments => agentTool('proposeRebooking', { disruption: ID, assignments, rationale: 'Test.' })
+    const on = (travelId, bookingId, itinerary) => ({ travelId, bookingId, itinerary })
+    await assert.rejects(propose([on('90000201', '0001', 'UA 0941 2026-10-12')]),
+      /NOT_LISTED: Itinerary UA 0941 2026-10-12 is not listed for 90000201\/0001 on LH 0454 2026-10-27\./, 'listed for LH 0400 on 10-12 only')
+    const viaDL = 'LH 0400 2026-10-27 > DL 0365 2026-10-27', viaB6 = 'LH 0400 2026-10-27 > B6 0415 2026-10-27'
+    await assert.rejects(propose([on('90000202', '0001', viaDL), on('90000202', '0002', viaDL), on('90000202', '0003', viaDL), on('90000203', '0001', viaB6)]),
+      /OVER_CAPACITY: Flight LH 0400 2026-10-27 has 3 seats available, the plan uses more\./, 'each itinerary fits; together they overfill LH 0400')
+    assert.deepEqual(await SELECT.from('fr.Plans').where({ disruption_ID: ID }), [])
+    const { plan } = await propose([on('90000202', '0001', viaDL), on('90000203', '0001', 'DE 2096 2026-10-27')])
+    const items = await SELECT.from('fr.PlanItems').where({ plan_ID: plan }).orderBy('travelId')
+    assert.deepEqual(items.map(i => [i.travelId, i.toCarrierId, i.toConnectionId, i.toFlightDate]), [['90000202', 'LH', '0400', D], ['90000203', 'DE', '2096', D]])
+    assert.deepEqual((await SELECT.from('fr.PlanItemLegs').where({ item_ID: items[0].ID })).map(l => [l.legNo, l.carrierId, l.connectionId, l.flightDate]),
+      [[2, 'DL', '0365', D]])
+  })
+})

@@ -13,11 +13,14 @@ using { ZFR_REBOOK } from '../external/ZFR_REBOOK';
  * through an approved plan.
  * 1. Find the disruption. If the user names a flight, query Disruptions for an Open one with that carrierId,
  *    connectionId and flightDate. If there is none, say so and stop: never invent a disruption.
- * 2. Call disruptionImpact. It lists the affected bookings with their flights and the only valid alternative flights,
- *    each for one affected flight (forFlight), with their seatsAvailable.
- * 3. Propose one plan with proposeRebooking, using only listed bookings and alternatives listed for that booking's
- *    flight, and never more bookings on a flight than its seatsAvailable. Prefer the earliest arrival; keep bookings of
- *    the same travelId together on one flight when you can. Say which bookings stay unassigned and why.
+ * 2. Call disruptionImpact. It lists the affected bookings with their flights. For a Cancellation it lists the only valid
+ *    itineraries: one to three flights to the cancelled flight's destination, earliest arrival first, each with its
+ *    seatsAvailable, and their flights in legs. For a TrafficJam it lists the only valid alternative flights, each for
+ *    one affected flight (forFlight), with their seatsAvailable.
+ * 3. Propose one plan with proposeRebooking, using only listed bookings. For a Cancellation, give each booking one listed
+ *    itinerary by its id. Prefer the earliest arrival, then fewer connections; keep bookings of the same travelId
+ *    together when you can. Itineraries can share a flight: across all of them, never put more bookings on a flight
+ *    than its seatsAvailable in legs. Say which bookings stay unassigned and why.
  * 4. For a Cancellation, calling applyRebooking IS the approval request: the system pauses for a human dispatcher before
  *    it runs, so never ask for confirmation in text. Call it in the same turn right after proposeRebooking, with the plan
  *    ID that proposeRebooking returned.
@@ -36,6 +39,7 @@ service RebookAgentService {
   @readonly entity Disruptions as projection on fr.Disruptions excluding { plans, agentTask, agentStatus, agentMessage };
   @readonly entity Plans       as projection on fr.Plans excluding { agentTask };
   @readonly entity PlanItems   as projection on fr.PlanItems;
+  @readonly entity PlanItemLegs as projection on fr.PlanItemLegs;
 
   /** The disruption, its affected bookings and the only valid alternative flights with seatsAvailable. Changes nothing. */
   function disruptionImpact(disruption : UUID) returns fr.Impact;

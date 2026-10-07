@@ -60,27 +60,30 @@ beforeEach(async () => {
 })
 
 describe('impact', () => {
-  test('lists active bookings and only same-route alternatives within two days that have seats', async () => {
+  test('lists active bookings and the itineraries to the destination that have seats, earliest arrival first', async () => {
     const { RebookAgentService } = cds.services
     const impact = await RebookAgentService.tx({ user: new cds.User({ id: 'dispatcher', roles: ['Dispatcher'] }) }, tx => tx.send('disruptionImpact', { disruption }))
     assert.equal(impact.disruption.flight, 'LH 0400 2026-10-12')
     assert.equal(impact.affectedBookings.length, 9, 'the cancelled booking 00000107/0001 is excluded')
     assert.ok(!impact.affectedBookings.some(b => b.travelId === '00000107'))
-    assert.deepEqual(impact.alternatives.map(a => [a.carrierId, a.connectionId, a.flightDate, a.seatsAvailable]), [
-      ['UA', '0941', '2026-10-12', 3], ['LH', '0400', '2026-10-13', 2], ['LH', '0400', '2026-10-14', 1]
-    ], 'no FRA-EWR flight, no full UA 0941 on 10-13, nothing after 10-14')
+    assert.deepEqual(impact.itineraries.map(i => [i.id, i.connections, i.seatsAvailable, i.forFlight]), [
+      ['UA 0941 2026-10-12', 0, 3, 'LH 0400 2026-10-12'], ['LH 0400 2026-10-13', 0, 2, 'LH 0400 2026-10-12'], ['LH 0400 2026-10-14', 0, 1, 'LH 0400 2026-10-12']
+    ], 'FRA-JFK has direct flights only; no full UA 0941 on 10-13, nothing after 10-14')
+    assert.deepEqual(impact.legs.map(l => [l.itinerary, l.legNo, l.seatsFree, l.seatsHeld, l.seatsAvailable]), [
+      ['UA 0941 2026-10-12', 1, 3, 0, 3], ['LH 0400 2026-10-13', 1, 2, 0, 2], ['LH 0400 2026-10-14', 1, 1, 0, 1]])
+    assert.deepEqual(impact.alternatives, [], 'alternatives are for traffic jams')
     assert.equal(impact.seatsAvailable, 6)
     assert.match(impact.note, /3 will stay unassigned/)
   })
 
-  test('a flight cancelled in the booking system is no alternative, even after its disruption was closed', async () => {
+  test('a flight cancelled in the booking system is in no itinerary, even after its disruption was closed', async () => {
     globalThis.FR_LLM = { idle: true }
     ok(await control('cancelFlight', { carrierId: 'UA', connectionId: '0941', flightDate: '2026-10-12', reason: 'Crew' }))
     const ua = await opened('UA', '0941', '2026-10-12')
     ok(await control('closeDisruption', { disruption: ua.ID }))
     const { RebookAgentService } = cds.services
     const impact = await RebookAgentService.tx({ user: new cds.User({ id: 'dispatcher', roles: ['Dispatcher'] }) }, tx => tx.send('disruptionImpact', { disruption }))
-    assert.deepEqual(impact.alternatives.map(a => `${a.carrierId} ${a.connectionId} ${a.flightDate}`), ['LH 0400 2026-10-13', 'LH 0400 2026-10-14'])
+    assert.deepEqual(impact.itineraries.map(i => i.id), ['LH 0400 2026-10-13', 'LH 0400 2026-10-14'])
   })
 })
 
@@ -144,11 +147,11 @@ describe('agent: refusals', () => {
   })
 
   test('a plan over a flight\'s seats, with an unaffected booking, or with an extra argument is refused and nothing is saved', async () => {
-    const over = Array.from({ length: 3 }, (_, i) => ({ travelId: ['00000101', '00000102', '00000102'][i], bookingId: ['0001', '0001', '0002'][i], carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-13' }))
+    const over = Array.from({ length: 3 }, (_, i) => ({ travelId: ['00000101', '00000102', '00000102'][i], bookingId: ['0001', '0001', '0002'][i], itinerary: 'LH 0400 2026-10-13' }))
     for (const [script, reason] of [
-      [{ assignments: over }, /OVER_CAPACITY/],
-      [{ assignments: [{ travelId: '00000109', bookingId: '0001', carrierId: 'UA', connectionId: '0941', flightDate: '2026-10-12' }] }, /NOT_AFFECTED/],
-      [{ assignments: [{ travelId: '00000101', bookingId: '0001', carrierId: 'LH', connectionId: '0402', flightDate: '2026-10-12' }] }, /NOT_LISTED/],
+      [{ assignments: over }, /OVER_CAPACITY: Flight LH 0400 2026-10-13 has 2 seats available/],
+      [{ assignments: [{ travelId: '00000109', bookingId: '0001', itinerary: 'UA 0941 2026-10-12' }] }, /NOT_AFFECTED/],
+      [{ assignments: [{ travelId: '00000101', bookingId: '0001', itinerary: 'LH 0402 2026-10-12' }] }, /NOT_LISTED: Itinerary LH 0402 2026-10-12 is not listed/],
       [{ extra: { approved: true } }, /Unrecognized key/]
     ]) {
       globalThis.FR_LLM = { disruption, ...script }

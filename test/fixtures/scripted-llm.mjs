@@ -3,7 +3,8 @@
 //   { disruption?, assignments?, extra?, stopAfterPropose?, finalTool?, idle?, fail? }
 // Without `disruption` it takes the ID from "disruption <uuid>" in the first user message (the server's prompt).
 // `idle`: answers with text and calls no tool. `fail`: throws, as a model without a key would.
-// disruptionImpact → proposeRebooking (greedy earliest-first unless `assignments` is given) → applyRebooking, or
+// disruptionImpact → proposeRebooking (greedy earliest-first unless `assignments` is given; for a cancellation by
+// itinerary, counting each flight's seats once across the itineraries that share it) → applyRebooking, or
 // sendOffers when the impact is a TrafficJam's; `finalTool` names that last call instead.
 // It records the tool names it is given on globalThis.FR_LLM_TOOLS.
 import { BaseChatModel } from '@langchain/core/language_models/chat_models'
@@ -22,6 +23,22 @@ export function table(text, name) {
 }
 
 export function greedy(impact) {
+  if (impact.itineraries.length) {
+    const left = {}, flights = {}
+    for (const l of impact.legs) {
+      const f = `${l.carrierId} ${l.connectionId} ${l.flightDate}`
+      left[f] = l.seatsAvailable
+      ;(flights[l.itinerary] ??= []).push(f)
+    }
+    const out = []
+    for (const b of impact.affectedBookings) {
+      const i = impact.itineraries.find(x => (flights[x.id] ?? []).every(f => left[f] > 0))
+      if (!i) break
+      for (const f of flights[i.id]) left[f]--
+      out.push({ travelId: b.travelId, bookingId: b.bookingId, itinerary: i.id })
+    }
+    return out
+  }
   const seats = impact.alternatives.map(a => ({ ...a, left: a.seatsAvailable }))
   const out = []
   for (const b of impact.affectedBookings) {
@@ -51,7 +68,8 @@ export default class ScriptedModel extends BaseChatModel {
     const text = String(last?.content ?? '')
     if (!last) return call('disruptionImpact', { disruption })
     if (last.name === 'disruptionImpact') {
-      const impact = { affectedBookings: table(text, 'affectedBookings'), alternatives: table(text, 'alternatives') ?? [] }
+      const impact = { affectedBookings: table(text, 'affectedBookings'), alternatives: table(text, 'alternatives') ?? [],
+        itineraries: table(text, 'itineraries') ?? [], legs: table(text, 'legs') ?? [] }
       if (!impact.affectedBookings) return done(`Scripted end. ${text.slice(0, 300)}`)
       return call('proposeRebooking', { disruption, assignments: script.assignments ?? greedy(impact), rationale: 'Scripted: earliest flights first.', ...script.extra })
     }

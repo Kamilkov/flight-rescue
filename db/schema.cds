@@ -63,4 +63,15 @@ entity PlanItems : cuid {
   // Offered: waiting for the passenger; Accepting: their answer is being applied in ABAP.
   status           : String(10) enum { Planned; Offered; Accepting; Rebooked; Failed } default 'Planned';
   message          : String(500);
+  // A cancellation's itinerary of two or three flights: to* is leg 1, legs holds the others.
+  legs             : Composition of many PlanItemLegs on legs.item = $self;
+}
+
+/** Leg 2 or 3 of a plan item's itinerary. */
+entity PlanItemLegs {
+  key item         : Association to PlanItems;
+  key legNo        : Integer;
+      carrierId    : String(3);
+      connectionId : String(4);
+      flightDate   : Date;
 }

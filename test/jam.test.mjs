@@ -217,7 +217,7 @@ describe('the agent and a traffic jam', () => {
     ok(await control('cancelFlight', { carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-20', reason: 'Crew' }))
     const c = await until(async () => { const d = await SELECT.one.from('fr.Disruptions').where({ kind: 'Cancellation', flightDate: '2026-10-20' }); return d?.agentStatus && d.agentStatus !== 'Working' && d })
     const impact = await agentTool('disruptionImpact', { disruption: c.ID })
-    assert.deepEqual(impact.alternatives.map(a => [a.carrierId, a.connectionId, a.flightDate, a.seatsAvailable]), [['LH', '0404', '2026-10-20', 1]],
+    assert.deepEqual(impact.itineraries.map(i => [i.id, i.seatsAvailable]), [['LH 0404 2026-10-20', 1]],
       'DL 0107: 2 free, 2 offered; LH 0404: 3 free, 2 offered')
   })
 

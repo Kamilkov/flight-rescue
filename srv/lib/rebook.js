@@ -1,8 +1,9 @@
 const cds = require('@sap/cds')
 const abap = require('./abap')
+const { id: itineraryId } = require('./itineraries')
 
 // Rebooking rules, shared by the agent and the control service. The server decides what is valid:
-// the agent can only choose among the bookings and alternatives impact() lists, and nothing reaches
+// the agent can only choose among the bookings, itineraries and alternatives impact() lists, and nothing reaches
 // ABAP until apply() runs after a person approved the plan, or, for a traffic jam, until a passenger accepts an offer.
 
 const WINDOW_DAYS = 2 // cancellation: same route, the disrupted day up to two days later
@@ -20,11 +21,15 @@ async function openDisruption(req, ID) {
   return d
 }
 
-/** Seats promised elsewhere, by flight: pending plans of other disruptions, and every offer not answered yet on an open disruption. */
+/** Seats promised elsewhere, by flight: pending plans of other disruptions (every leg of their itineraries), and every
+ *  offer not answered yet on an open disruption. */
 async function heldSeats(disruptionID) {
   const cols = ['toCarrierId', 'toConnectionId', 'toFlightDate', 'count(*) as seats'], by = ['toCarrierId', 'toConnectionId', 'toFlightDate']
+  const legs = ['carrierId as toCarrierId', 'connectionId as toConnectionId', 'flightDate as toFlightDate', 'count(*) as seats']
   const rows = [
     ...await SELECT.from('fr.PlanItems').columns(...cols).where({ 'plan.status': 'Pending', 'plan.disruption_ID': { '!=': disruptionID } }).groupBy(...by),
+    ...await SELECT.from('fr.PlanItemLegs').columns(...legs).where({ 'item.plan.status': 'Pending', 'item.plan.disruption_ID': { '!=': disruptionID } })
+      .groupBy('carrierId', 'connectionId', 'flightDate'),
     ...await SELECT.from('fr.PlanItems').columns(...cols).where({ status: { in: ['Offered', 'Accepting'] }, 'plan.disruption.status': 'Open' }).groupBy(...by)
   ]
   const held = {}
@@ -33,6 +38,16 @@ async function heldSeats(disruptionID) {
     held[key] = (held[key] ?? 0) + Number(h.seats)
   }
   return held
+}
+
+/** One leg of a listed itinerary, with the seats still free after other plans and open offers. */
+const leg = (l, legNo, itinerary, held) => {
+  const seatsHeld = held[flightKey(l)] ?? 0
+  return {
+    itinerary, legNo, carrierId: l.CarrierId, connectionId: l.ConnectionId, flightDate: abap.iso(l.FlightDate),
+    airportFrom: l.AirportFrom, airportTo: l.AirportTo, departureTime: l.DepartureTime, arrivalTime: l.ArrivalTime,
+    seatsFree: l.SeatsFree, seatsHeld, seatsAvailable: Math.max(0, l.SeatsFree - seatsHeld)
+  }
 }
 
 /** One listed alternative for flight `from`. */
@@ -53,27 +68,41 @@ const summary = d => ({
   jamDate: d.jamDate ?? null, jamTime: d.jamTime ?? null, road: d.road ?? null, delayMinutes: d.delayMinutes ?? null
 })
 
-/** Affected bookings and the only valid alternatives, with the seats still free after other plans and open offers. */
+/** Affected bookings and the only valid itineraries (cancellation) or alternatives (traffic jam), with the seats still
+ *  free after other plans and open offers. */
 async function impact(req, disruptionID) {
   const d = await openDisruption(req, disruptionID)
   return d.kind === 'TrafficJam' ? jamImpact(d) : cancellationImpact(d)
 }
 
 async function cancellationImpact(d) {
-  const [bookings, flights, held] = await Promise.all([abap.bookingsOn(d), abap.sameRoute(d, WINDOW_DAYS), heldSeats(d.ID)])
+  const [bookings, routes, held] = await Promise.all([abap.bookingsOn(d), abap.itineraries(d), heldSeats(d.ID)])
   // Only a cancellation takes its flight out of service; a jam's flights still fly.
   const disrupted = new Set((await SELECT.from('fr.Disruptions').where({ status: 'Open', kind: 'Cancellation' })).map(flightKey))
-  const alternatives = flights.filter(f => !f.IsCancelled && !disrupted.has(flightKey(f))).map(f => alternative(f, d, held)).filter(a => a.seatsAvailable > 0)
-  const seats = alternatives.reduce((n, a) => n + a.seatsAvailable, 0)
+  const itineraries = [], legs = [], uses = {}
+  for (const route of routes) {
+    if (route.some(l => disrupted.has(flightKey(l)))) continue
+    const id = itineraryId(route), rows = route.map((l, n) => leg(l, n + 1, id, held))
+    const seatsAvailable = Math.min(...rows.map(r => r.seatsAvailable))
+    if (!seatsAvailable) continue
+    for (const r of rows) uses[flightKey(r)] = (uses[flightKey(r)] ?? 0) + 1
+    itineraries.push({ id, route: [route[0].AirportFrom, ...route.map(l => l.AirportTo)].join('→'), arrivesOn: abap.iso(route[0].ArrivesOn),
+      arrivesAt: route[0].ArrivesAt, connections: route.length - 1, seatsAvailable, forFlight: flightName(d) })
+    legs.push(...rows)
+  }
+  // Itineraries sharing a flight make the sum of their seats an upper bound, not a count.
+  const n = bookings.length, seats = itineraries.reduce((sum, i) => sum + i.seatsAvailable, 0), shared = Object.values(uses).some(u => u > 1)
   return {
     disruption: summary(d),
     affectedBookings: bookings.map(booking), // no customer data for the model
-    alternatives,
+    itineraries, legs, alternatives: [],
     seatsAvailable: seats,
-    note: !bookings.length ? 'No active bookings on this flight: nothing to rebook.'
-      : !alternatives.length ? 'No alternative flight has a free seat: no rebooking is possible.'
-      : seats < bookings.length ? `Only ${seats} seats for ${bookings.length} bookings: ${bookings.length - seats} will stay unassigned.`
-      : `Enough seats for all ${bookings.length} bookings.`
+    note: !n ? 'No active bookings on this flight: nothing to rebook.'
+      : !itineraries.length ? 'No itinerary has a free seat on every flight: no rebooking is possible.'
+      : [`${n} bookings, ${itineraries.length} itineraries of one to three flights, earliest arrival first.`,
+        shared ? 'Itineraries share flights: per flight, keep the bookings across all itineraries within its seatsAvailable in legs.' : '',
+        seats < n ? `${shared ? 'At most' : 'Only'} ${seats} seats for ${n} bookings: ${shared ? 'at least ' : ''}${n - seats} will stay unassigned.`
+          : shared ? '' : `Enough seats for all ${n} bookings.`].filter(Boolean).join(' ')
   }
 }
 
@@ -105,7 +134,7 @@ async function jamImpact(d) {
   // returned seatsAvailable as well as the note (propose() checks capacity per flight). Two jammed flights on one route: count distinct flights then.
   const seats = alternatives.reduce((n, a) => n + a.seatsAvailable, 0), risk = affectedBookings.length
   return {
-    disruption: summary(d), affectedBookings, alternatives, seatsAvailable: seats,
+    disruption: summary(d), affectedBookings, alternatives, itineraries: [], legs: [], seatsAvailable: seats,
     note: [...notes,
       !risk ? 'Nobody is at risk: there is no offer to make.'
         : !alternatives.length ? 'No later flight has a free seat: no offer is possible.'
@@ -163,36 +192,43 @@ async function jamBoard(d) {
   return rows
 }
 
-/** Saves a Pending plan. Every assignment must use a listed booking and an alternative listed for that booking's
- *  own flight, within its seats. */
+/** Saves a Pending plan. Every assignment must use a listed booking, and an itinerary (cancellation) or an alternative
+ *  (traffic jam) listed for that booking's own flight, within the seats of every flight it uses. */
 async function propose(req, { disruption, assignments = [], rationale }, agentTask = null) {
   const now = await impact(req, disruption)
   if (!assignments.length) return req.reject(400, `EMPTY: A plan needs at least one assignment. ${now.note}`)
+  const jam = now.disruption.kind === 'TrafficJam'
   const bookings = new Map(now.affectedBookings.map(b => [`${b.travelId}/${b.bookingId}`, b]))
-  const seen = new Set(), used = {}
+  const seen = new Set(), used = {}, items = []
   for (const a of assignments) {
-    const key = `${a.travelId}/${a.bookingId}`, b = bookings.get(key), f = flightKey(a)
+    const key = `${a.travelId}/${a.bookingId}`, b = bookings.get(key)
     if (!b) return req.reject(400, `NOT_AFFECTED: Booking ${key} is not an affected booking of this disruption.`)
     if (seen.has(key)) return req.reject(400, `DUPLICATE: Booking ${key} is assigned twice.`)
-    const listed = now.alternatives.find(x => flightKey(x) === f && x.forFlight === flightName(b))
-    if (!listed) return req.reject(400, `NOT_LISTED: Flight ${f} is not a listed alternative for ${key} on ${flightName(b)}.`)
+    let flights // the flights this assignment puts the booking on, in order, each with its seatsAvailable
+    if (jam) {
+      const listed = now.alternatives.find(x => flightKey(x) === flightKey(a) && x.forFlight === flightName(b))
+      if (!listed) return req.reject(400, `NOT_LISTED: Flight ${flightKey(a)} is not a listed alternative for ${key} on ${flightName(b)}.`)
+      flights = [listed]
+    } else {
+      const listed = now.itineraries.find(i => i.id === a.itinerary && i.forFlight === flightName(b))
+      if (!listed) return req.reject(400, `NOT_LISTED: Itinerary ${a.itinerary} is not listed for ${key} on ${flightName(b)}.`)
+      flights = now.legs.filter(l => l.itinerary === listed.id)
+    }
     seen.add(key)
-    if ((used[f] = (used[f] ?? 0) + 1) > listed.seatsAvailable)
-      return req.reject(400, `OVER_CAPACITY: Flight ${f} has ${listed.seatsAvailable} seats available, the plan uses more.`)
+    for (const f of flights)
+      if ((used[flightKey(f)] = (used[flightKey(f)] ?? 0) + 1) > f.seatsAvailable)
+        return req.reject(400, `OVER_CAPACITY: Flight ${flightKey(f)} has ${f.seatsAvailable} seats available, the plan uses more.`)
+    const [first, ...further] = flights
+    items.push({
+      travelId: a.travelId, bookingId: a.bookingId,
+      fromCarrierId: b.carrierId, fromConnectionId: b.connectionId, fromFlightDate: b.flightDate,
+      toCarrierId: first.carrierId, toConnectionId: first.connectionId, toFlightDate: abap.iso(first.flightDate),
+      legs: further.map((l, n) => ({ legNo: n + 2, carrierId: l.carrierId, connectionId: l.connectionId, flightDate: abap.iso(l.flightDate) }))
+    })
   }
 
   await UPDATE('fr.Plans').set({ status: 'Superseded' }).where({ disruption_ID: disruption, status: 'Pending' })
-  const plan = {
-    ID: cds.utils.uuid(), disruption_ID: disruption, status: 'Pending', rationale: String(rationale ?? '').slice(0, 1000), agentTask,
-    items: assignments.map(a => {
-      const b = bookings.get(`${a.travelId}/${a.bookingId}`)
-      return {
-        travelId: a.travelId, bookingId: a.bookingId,
-        fromCarrierId: b.carrierId, fromConnectionId: b.connectionId, fromFlightDate: b.flightDate,
-        toCarrierId: a.carrierId, toConnectionId: a.connectionId, toFlightDate: abap.iso(a.flightDate)
-      }
-    })
-  }
+  const plan = { ID: cds.utils.uuid(), disruption_ID: disruption, status: 'Pending', rationale: String(rationale ?? '').slice(0, 1000), agentTask, items }
   await INSERT.into('fr.Plans').entries(plan)
   const unassigned = now.affectedBookings.filter(b => !seen.has(`${b.travelId}/${b.bookingId}`)).map(b => ({ travelId: b.travelId, bookingId: b.bookingId }))
   return { plan: plan.ID, disruption, assigned: assignments.length, unassigned, status: 'Pending',
