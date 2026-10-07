@@ -181,6 +181,7 @@ When a flight is cancelled, its passengers are no longer limited to later flight
 
 Limits:
 - `/DMO/` stores local times without time zones or arrival dates. The arrival day is guessed: right for FRA, JFK, EWR, SFO, MIA and HAV, wrong for SFO→SIN. Routing elsewhere needs airport time zones.
+- The graph holds flights up to 30 days out. A cancellation more than 27 days out finds only the itineraries within that horizon, and one more than 30 days out finds none.
 - Extra legs cost 0; there is no fare logic.
 - New booking IDs are the travel's highest + 1 without a lock on the travel. Two rebookings into one travel at the same moment can collide, and the second then fails as a whole.
 - The graph is rebuilt on every query: 66,952 edges, the slowest answer 956 ms (2026-10-07; the first call after an activation took 13.5 s).

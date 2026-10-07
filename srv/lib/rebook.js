@@ -98,7 +98,7 @@ async function cancellationImpact(d) {
     itineraries, legs, alternatives: [],
     seatsAvailable: seats,
     note: !n ? 'No active bookings on this flight: nothing to rebook.'
-      : !itineraries.length ? 'No itinerary has a free seat on every flight: no rebooking is possible.'
+      : !itineraries.length ? 'No itinerary of one to three flights has a free seat on every flight up to 30 days out: no rebooking is possible.'
       : [`${n} bookings, ${itineraries.length} itineraries of one to three flights, earliest arrival first.`,
         shared ? 'Itineraries share flights: per flight, keep the bookings across all itineraries within its seatsAvailable in legs.' : '',
         seats < n ? `${shared ? 'At most' : 'Only'} ${seats} seats for ${n} bookings: ${shared ? 'at least ' : ''}${n - seats} will stay unassigned.`

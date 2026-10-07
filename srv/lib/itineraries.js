@@ -1,6 +1,7 @@
 // The rerouting rules of ABAP's graph (abap/zi_fr_graphedge.ddls.asddls, abap/zcl_fr_itineraries.clas.abap) as a plain
 // search over a list of flights, and rebookItinerary's checks (abap/zbp_r_fr_booking.clas.locals_imp.abap). The mock
-// uses both offline; scripts/abap-check.mjs compares the graph with the search live.
+// uses both offline; scripts/abap-check.mjs compares the graph with the search live. The search itself has no 30-day
+// horizon (ABAP's graph does, in ZI_FR_GraphFlight), so it matches the graph only for windows within 30 days.
 
 const DAY = 86400
 const LAYOVER = { min: 90 * 60, max: 12 * 3600 } // seconds between one flight's arrival and the next one's departure
