@@ -6,11 +6,17 @@ persistent table zfr_booking
 lock master
 authorization master ( global )
 {
-  // No external create, update or delete: the only way to change a booking is the rebook action.
+  // No external create, update or delete. A booking changes only through rebook, or through rebookItinerary, which
+  // also creates the bookings for an itinerary's further flights.
+  internal create;
   internal update;
   field ( readonly ) TravelId, BookingId;
 
   action rebook parameter ZA_FR_RebookTarget result [1] $self;
+  action rebookItinerary parameter ZA_FR_RebookItinerary result [1] $self;
+
+  // A flight's active bookings after a save may not exceed its seats, counting every booking the save changes.
+  validation seatsLeft on save { create; field CarrierId, ConnectionId, FlightDate; }
 
   mapping for zfr_booking
     {
