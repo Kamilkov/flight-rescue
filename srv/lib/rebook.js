@@ -6,7 +6,7 @@ const { id: itineraryId } = require('./itineraries')
 // the agent can only choose among the bookings, itineraries and alternatives impact() lists, and nothing reaches
 // ABAP until apply() runs after a person approved the plan, or, for a traffic jam, until a passenger accepts an offer.
 
-const WINDOW_DAYS = 2 // cancellation: same route, the disrupted day up to two days later
+// Cancellation: ABAP's graph lists itineraries of one to three flights to the destination (srv/lib/itineraries.js).
 // Traffic jam: flights leaving 60–180 min after the jam are affected; an offer is a flight on the same route, the same
 // day, leaving at least 45 min after the booking's own flight. Times are FRA local, like /DMO/ departure times.
 const JAM = { fromMin: 60, toMin: 180, gapMin: 45 }
@@ -146,23 +146,42 @@ async function jamImpact(d) {
 /** A flight's seats for the cockpit's fill map. */
 const load = (f, extra) => ({
   carrierId: f.CarrierId, connectionId: f.ConnectionId, flightDate: abap.iso(f.FlightDate),
-  departureTime: f.DepartureTime, arrivalTime: f.ArrivalTime,
+  airportFrom: f.AirportFrom, airportTo: f.AirportTo, departureTime: f.DepartureTime, arrivalTime: f.ArrivalTime,
   seatsMax: f.SeatsMax, seatsBooked: f.SeatsBooked, seatsFree: f.SeatsFree,
   cancelled: false, affected: false, highlighted: 0, held: 0, ...extra
 })
 
-/** Cancellation: the disrupted flight, then every same-route flight in the window. Jam: see jamBoard. */
+/** Cancellation: the cancelled flight, then the legs of up to 5 itineraries, the latest plan's first, then the listed
+ *  ones; a flight shared by itineraries shows in each of their rows. Jam: see jamBoard. */
 async function board(req, disruptionID) {
   const d = await SELECT.one.from('fr.Disruptions').where({ ID: disruptionID })
   if (!d) return req.reject(404, `NO_DISRUPTION: Disruption ${disruptionID} does not exist.`)
   if (d.kind === 'TrafficJam') return jamBoard(d)
-  const [own, others, bookings, moved] = await Promise.all([
-    abap.flight(d), abap.sameRoute(d, WINDOW_DAYS), abap.bookingsOn(d),
-    SELECT.from('fr.PlanItems').columns('toCarrierId', 'toConnectionId', 'toFlightDate', 'count(*) as n')
-      .where({ status: 'Rebooked', 'plan.disruption_ID': d.ID }).groupBy('toCarrierId', 'toConnectionId', 'toFlightDate')
+  const plan = await SELECT.one.from('fr.Plans').columns('ID').where({ disruption_ID: d.ID }).orderBy('createdAt desc')
+  const [own, routes, bookings, planned, rebooked] = await Promise.all([
+    abap.flight(d), abap.itineraries(d), abap.bookingsOn(d), plan ? flightsOfItems({ plan_ID: plan.ID }) : [],
+    flightsOfItems({ status: 'Rebooked', 'plan.disruption_ID': d.ID })
   ])
-  const movedTo = Object.fromEntries(moved.map(m => [flightKey({ carrierId: m.toCarrierId, connectionId: m.toConnectionId, flightDate: m.toFlightDate }), Number(m.n)]))
-  return [...(own ? [load(own, { cancelled: true, highlighted: bookings.length })] : []), ...others.map(f => load(f, { highlighted: movedTo[flightKey(f)] ?? 0 }))]
+  const moved = {} // bookings moved onto each flight, as leg 1 or a further leg
+  for (const f of rebooked.flat()) moved[flightKey(f)] = (moved[flightKey(f)] ?? 0) + 1
+  const shown = new Map()
+  for (const legs of [...planned, ...routes]) if (shown.size < 5 && !shown.has(itineraryId(legs))) shown.set(itineraryId(legs), legs)
+  const keys = new Map([...shown.values()].flat().map(l => [flightKey(l), l]))
+  const flights = new Map((await Promise.all([...keys.values()].map(l => abap.flight({ carrierId: l.carrierId ?? l.CarrierId,
+    connectionId: l.connectionId ?? l.ConnectionId, flightDate: l.flightDate ?? l.FlightDate })))).filter(Boolean).map(f => [flightKey(f), f]))
+  const rows = own ? [load(own, { cancelled: true, highlighted: bookings.length, itinerary: null, legNo: null })] : []
+  for (const [itinerary, legs] of shown) legs.forEach((l, n) => {
+    const f = flights.get(flightKey(l))
+    if (f) rows.push(load(f, { itinerary, legNo: n + 1, highlighted: moved[flightKey(l)] ?? 0 }))
+  })
+  return rows
+}
+
+/** The flights of the plan items matching `where`, per item: to*, then its further legs. */
+async function flightsOfItems(where) {
+  const items = await SELECT.from('fr.PlanItems').columns('ID', 'toCarrierId', 'toConnectionId', 'toFlightDate').where(where).orderBy('travelId', 'bookingId')
+  const legs = items.length ? await SELECT.from('fr.PlanItemLegs').where({ item_ID: { in: items.map(i => i.ID) } }).orderBy('legNo') : []
+  return items.map(i => [{ carrierId: i.toCarrierId, connectionId: i.toConnectionId, flightDate: i.toFlightDate }, ...legs.filter(l => l.item_ID === i.ID)])
 }
 
 /** Jam: each flight with bookings at risk or offers (affected), then the later flights that day on its route.
@@ -314,4 +333,4 @@ async function accept(req, itemID) {
   await moveItem(i)
 }
 
-module.exports = { impact, board, propose, apply, sendOffers, offerOf, accept, WINDOW_DAYS, JAM }
+module.exports = { impact, board, propose, apply, sendOffers, offerOf, accept, JAM }

@@ -188,3 +188,28 @@ describe('approving a plan of itineraries', () => {
       ['0001 DE 2096', '0002 DE 2096', '0003 UA 0059', '0004 LH 0454'], 'the refused itinerary left no booking behind')
   })
 })
+
+describe('the seat board of an itinerary cancellation', () => {
+  test('the cancelled flight, then the legs of up to five itineraries, the plan\'s first; moved bookings count on every leg', async () => {
+    const ID = await cancel('LH', '0454', D)
+    const row = f => [f.itinerary, f.legNo, `${f.carrierId} ${f.connectionId} ${f.flightDate}`, f.highlighted]
+    const viaB6 = 'LH 0400 2026-10-27 > B6 0415 2026-10-27', viaDL = 'DL 0107 2026-10-27 > DL 0365 2026-10-27', viaLH = 'LH 0400 2026-10-27 > DL 0365 2026-10-27'
+    assert.deepEqual(ok(await get(`flightBoard(disruption=${ID})`)).value.map(row), [
+      [null, null, 'LH 0454 2026-10-27', 9],
+      ['DE 2096 2026-10-27', 1, 'DE 2096 2026-10-27', 0],
+      ['UA 0059 2026-10-27', 1, 'UA 0059 2026-10-27', 0],
+      [viaB6, 1, 'LH 0400 2026-10-27', 0], [viaB6, 2, 'B6 0415 2026-10-27', 0],
+      [viaDL, 1, 'DL 0107 2026-10-27', 0], [viaDL, 2, 'DL 0365 2026-10-27', 0],
+      [viaLH, 1, 'LH 0400 2026-10-27', 0], [viaLH, 2, 'DL 0365 2026-10-27', 0]
+    ], 'the sixth itinerary, DE 2096 the next day, is not shown')
+    globalThis.FR_LLM = { disruption: ID }
+    const t = await ask()
+    paused(t)
+    await approve(t)
+    const after = ok(await get(`flightBoard(disruption=${ID})`)).value
+    assert.deepEqual(after.slice(0, 3).map(row), [[null, null, 'LH 0454 2026-10-27', 0],
+      ['DE 2096 2026-10-27', 1, 'DE 2096 2026-10-27', 2], ['UA 0059 2026-10-27', 1, 'UA 0059 2026-10-27', 1]])
+    assert.deepEqual(after.filter(f => f.connectionId === '0365').map(f => f.highlighted), [4, 4], 'DL 0365 in two rows, the same four bookings')
+    assert.equal(after.length, 9)
+  })
+})

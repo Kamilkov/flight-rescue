@@ -116,6 +116,8 @@ type FlightLoad {
   carrierId     : String(3);
   connectionId  : String(4);
   flightDate    : Date;
+  airportFrom   : String(3);
+  airportTo     : String(3);
   departureTime : Time;
   arrivalTime   : Time;
   seatsMax      : Integer;
@@ -125,6 +127,8 @@ type FlightLoad {
   affected      : Boolean; // a traffic jam's flight, which its passengers at risk may miss
   held          : Integer; // offered seats not answered yet
   highlighted   : Integer; // cancelled flight: active bookings still on it; jam's flight: bookings at risk; others: bookings moved here
+  itinerary     : String;  // cancellation: the itinerary this row is a leg of
+  legNo         : Integer;
 }
 
 /** Which booking system the app talks to, the flight the cancellation demo is built around, and the traffic scenario's flight. */

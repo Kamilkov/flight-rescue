@@ -55,15 +55,15 @@ beforeEach(async () => {
 })
 
 describe('flightBoard', () => {
-  test('lists the cancelled flight first, then every same-route flight in the window, full ones included', async () => {
+  test('lists the cancelled flight first, then the legs of the listed itineraries', async () => {
     const board = ok(await get(`flightBoard(disruption=${disruption})`)).value
     assert.deepEqual(board.map(row), [
       ['LH', '0400', '2026-10-12', 372, 8, true, 9],
       ['UA', '0941', '2026-10-12', 237, 3, false, 0],
       ['LH', '0400', '2026-10-13', 378, 2, false, 0],
-      ['UA', '0941', '2026-10-13', 240, 0, false, 0],
       ['LH', '0400', '2026-10-14', 379, 1, false, 0]
-    ], 'highlighted on the cancelled flight counts its 9 active bookings, not its seat counter')
+    ], 'highlighted on the cancelled flight counts its 9 active bookings, not its seat counter; the full UA 0941 on 10-13 is in no itinerary')
+    assert.deepEqual(board.map(f => [f.itinerary, f.legNo]), [[null, null], ['UA 0941 2026-10-12', 1], ['LH 0400 2026-10-13', 1], ['LH 0400 2026-10-14', 1]])
     assert.equal(board[0].seatsMax, 380)
     assert.equal(board[0].departureTime, '10:10:00')
   })
@@ -77,9 +77,8 @@ describe('flightBoard', () => {
       ['LH', '0400', '2026-10-12', 366, 14, true, 3],
       ['UA', '0941', '2026-10-12', 240, 0, false, 3],
       ['LH', '0400', '2026-10-13', 380, 0, false, 2],
-      ['UA', '0941', '2026-10-13', 240, 0, false, 0],
       ['LH', '0400', '2026-10-14', 380, 0, false, 1]
-    ])
+    ], 'the plan\'s itineraries stay on the board, though full now')
   })
 
   test('an unknown disruption is 404; a user without the role is refused', async () => {
