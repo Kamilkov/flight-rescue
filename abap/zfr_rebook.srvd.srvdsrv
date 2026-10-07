@@ -3,4 +3,5 @@ define service ZFR_REBOOK {
   expose ZR_FR_Booking as Bookings;
   expose ZI_FR_Flight  as Flights;
   expose ZR_FR_FlightCancel as FlightCancellations;
+  expose ZI_FR_Itinerary as Itineraries;
 }
