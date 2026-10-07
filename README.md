@@ -72,7 +72,7 @@ One page for the whole flow, at http://localhost:4004/cockpit/index.html (sign i
 On a phone, `/cockpit/mobile.html` has just the cancel form and one status line (waiting for ABAP, agent working,
 plan waiting for approval, or the error), with a link to this page for the approval.
 
-3. **Booking system:** one map per flight of the route, one dot per seat. The affected passengers are highlighted and move to their new flights as ABAP confirms each booking.
+3. **Booking system:** one dot per seat: the cancelled flight, then a row for each of up to five itineraries (the plan's first) with its flights side by side. The affected passengers are highlighted and move to their new flights as ABAP confirms each booking.
 
 **Reset demo** starts over. Against ABAP it runs `ZCL_FR_GENERATE_DATA` through the ADT class-run endpoint (developer user on a trial system only), which recopies `/DMO/BOOKING` and rebuilds the demo scenario, and returns the scenario's flight. Against the mock it clears disruptions, plans and the mock's cancellations; restart the app to restore the mock bookings.
 
@@ -177,7 +177,7 @@ When a flight is cancelled, its passengers are no longer limited to later flight
   - `scripts/abap-check.mjs graph` compares the graph with a plain search (`srv/lib/itineraries.js`) for every pair of airports.
   - `scripts/abap-check.mjs booking` checks the refusals and the rollback of a failed change set.
   - `scripts/live-check.mjs itinerary` runs the whole flow against an app on your machine.
-  - ABAP reports cancellations only to the app behind `ZFR_CAP_EVENTS`, so these checks hand the event to that app themselves.
+  - ABAP reports cancellations only to the public app behind `ZFR_CAP_EVENTS`. So `live-check.mjs itinerary` reports the event to your app itself, and the checks that cancel a flight reset the public app afterwards (they need the tunnel to it).
 
 Limits:
 - `/DMO/` stores local times without time zones or arrival dates. The arrival day is guessed: right for FRA, JFK, EWR, SFO, MIA and HAV, wrong for SFO→SIN. Routing elsewhere needs airport time zones.
@@ -226,7 +226,7 @@ The cockpit, on the same day and system: Reset demo seeded the scenario for LH 0
   bound to `127.0.0.1:4024` only. `flight-rescue.env` holds `ANTHROPIC_API_KEY`, `SAP_USER`, `SAP_PASSWORD`,
   `DISPATCHER_PASSWORD`, `ABAP_EVENTS_PASSWORD`, `PASSENGER_PASSWORD`, `ABAP_URL`, `ABAP_CLIENT`.
 - **Cockpit:** `ssh -L 4024:127.0.0.1:4024 root@<vps>`, then http://localhost:4024/cockpit/index.html.
-- **Live check:** `APP_URL=http://localhost:4024 node scripts/live-check.mjs`. It reads only the secrets it needs from `~/.config/ai/secrets.env` (`scripts/secrets.mjs`), and exits 2 if its clean-up failed.
+- **Live check:** `APP_URL=http://localhost:4024 node scripts/live-check.mjs`. It reads only the secrets it needs from `~/.config/ai/secrets.env` (`scripts/secrets.mjs`), and `itinerary` exits 2 if its clean-up failed (`cancellation` and `traffic` leave their scenario for Reset demo).
 - **Traffic scenario:** `ZCL_FR_GENERATE_DATA` also builds it on FRA–JFK, on the first day two weeks out or later on
   which LH 0400, DL 0107 and LH 0404 all fly: 9 bookings on LH 0400 (travels 90000101–105 with 2, 2, 1, 2 and 2), and
   DL 0107, LH 0404 and DE 2016 (if it flies that day) filled to leave 2, 3 and 0 free seats. It prints
