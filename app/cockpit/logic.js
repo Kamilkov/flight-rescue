@@ -9,9 +9,13 @@ sap.ui.define([], () => {
   /** "LH 0402 · 14 Oct" */
   const flightLabel = f => `${f.carrierId} ${f.connectionId} · ${Number(f.flightDate.slice(8, 10))} ${MONTHS[Number(f.flightDate.slice(5, 7)) - 1]}`
 
-  /** The status next to a fill map. */
-  const note = f => f.cancelled ? 'cancelled' : f.affected ? `${count(f.highlighted)} at risk`
-    : `${f.seatsFree > 0 ? `${f.seatsFree} free` : 'full'}${count(f.held) ? `, ${count(f.held)} offered` : ''}`
+  /** The status next to a fill map. Its free seats are the dots' (the seats offered come out of the free ones), not ABAP's seatsFree. */
+  function note(f) {
+    if (f.cancelled) return 'cancelled'
+    if (f.affected) return `${count(f.highlighted)} at risk`
+    const free = dots(f).free, offered = count(f.held)
+    return offered ? `${offered} offered, ${free > 0 ? `${free} free` : 'none free'}` : free > 0 ? `${free} free` : 'full'
+  }
 
   /** Dots of one flight. Whatever the counts, they are never negative and add up to the seats. Held (offered) seats
    *  come out of the free ones. */
@@ -20,6 +24,11 @@ sap.ui.define([], () => {
     const held = Math.min(max - booked, count(f.held))
     return { booked: booked - highlighted, highlighted, held, free: max - booked - held }
   }
+
+  /** The Disruption pane's error text after a replay read. A failed read writes its message there; a good one takes back
+   *  only that message (`wrote`), so another error that came meanwhile (a cancel that ABAP did not deliver) stays.
+   *  `failure`: the read's error message, '' when it went through. */
+  const replayError = (text, wrote, failure) => failure ? { text: failure, wrote: failure } : { text: text === wrote ? '' : text, wrote: '' }
 
   /** The disruption list's line: the flight for a cancellation, the road for a traffic jam. */
   const disruptionLabel = d => d.kind === 'TrafficJam' ? `Traffic jam${d.road ? ` · ${d.road}` : ''}` : flightLabel(d)
@@ -177,5 +186,5 @@ sap.ui.define([], () => {
     }
   }
 
-  return { flightLabel, note, dots, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick, mobileStatus, disruptionLabel, disruptionRoute, chart, replayView, baseMap: BASE_MAP }
+  return { flightLabel, note, dots, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick, mobileStatus, disruptionLabel, disruptionRoute, chart, replayView, replayError, baseMap: BASE_MAP }
 })

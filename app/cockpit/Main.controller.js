@@ -66,9 +66,14 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
     },
 
     // The Traffic panel follows the replay on the server (started here or elsewhere). A failing read keeps the panel as it was and
-    // shows in its pane; it never throws, so it cannot stop the rest of poll().
+    // shows in its pane until a read goes through (and only its own text goes: logic.replayError); it never throws, so it cannot
+    // stop the rest of poll().
     async loadReplay() {
-      try { this.set('/replay', jam(await control('trafficReplay()'))); this.frameMap() } catch (e) { this.set('/errors/disruption', e.message) }
+      let failure = ''
+      try { this.set('/replay', jam(await control('trafficReplay()'))); this.frameMap() } catch (e) { failure = e.message }
+      const next = logic.replayError(this.get('/errors/disruption'), this.replayWrote, failure)
+      this.set('/errors/disruption', next.text)
+      this.replayWrote = next.wrote
     },
 
     // GeoMap honours its bound centre only at its first render, so frame it by hand when the centre changes. Never for an
@@ -88,7 +93,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       const d = this.get('/disruption'), planID = this.get('/planID')
       try {
         const board = d ? (await control(`flightBoard(disruption=${d.ID})`)).value : []
-        this.set('/board', board.map(f => ({ ...f, label: logic.flightLabel(f), note: logic.note(f) })))
+        this.set('/board', board.map(f => ({ ...f, label: logic.flightLabel(f), note: logic.note(f), free: logic.dots(f).free })))
         this.set('/errors/board', '')
         if (planID) {
           const p = await control(`Plans(${planID})?$expand=items`), groups = logic.groupPlan(p.items)

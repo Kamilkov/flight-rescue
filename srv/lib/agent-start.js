@@ -11,7 +11,7 @@ let base = null
 cds.on('listening', ({ url }) => { base = url })
 
 const prompt = d => d.kind === 'TrafficJam'
-  ? `Traffic jam at ${d.airportFrom} (disruption ${d.ID}): ${d.reason}, about ${d.delayMinutes} min. Offer the passengers at risk a later flight.`
+  ? `Traffic jam at ${d.airportFrom} (disruption ${d.ID}): ${d.reason}. Offer the passengers at risk a later flight.`
   : `${d.carrierId} ${d.connectionId} on ${String(d.flightDate).slice(0, 10)} was cancelled in the booking system (disruption ${d.ID}). Rebook the passengers.`
 
 async function run(ID) {

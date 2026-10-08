@@ -292,6 +292,10 @@ describe('the shipped incident', () => {
     const hit = traffic.fires(shipped.samples)
     assert.ok(hit, 'the rule fires')
     assert.equal(hit.origin, shipped.approach)
+    // The demo needs somebody at risk: the phone's booking drives via the approach the rule fires on (re-importing another incident must not break that silently).
+    const [head, ...rows] = require('node:fs').readFileSync(join(root, 'db/data/fr-PassengerContext.csv'), 'utf8').trim().split('\n').map(l => l.split(';'))
+    const phone = rows.map(r => Object.fromEntries(head.map((h, k) => [h, r[k].trim()]))).find(r => r.phone === 'true')
+    assert.equal(traffic.fires(shipped.samples, traffic.RULE).origin, phone.approach, 'the incident fires on the phone booking\'s approach')
     assert.match(shipped.label, shipped.simulated ? /^Simulated jam/ : /^Replay of a jam recorded on \d{4}-\d{2}-\d{2}/)
     assert.deepEqual([...new Set(shipped.samples.map(s => s.origin))].sort(), ['badhomburg', 'darmstadt', 'offenbach', 'wiesbaden'])
     assert.ok(shipped.reports.every(r => !/ \| |->/.test(`${r.location} ${r.direction}`)), 'the Autobahn text is cleaned: no "<road> | " and no "->"')

@@ -84,24 +84,25 @@ async function jamImpact(d) {
   const flights = (await abap.departures(d.airportFrom, d.jamDate)).filter(f => !f.IsCancelled && after(f) >= JAM.fromMin && after(f) <= JAM.toMin)
   const context = new Map((await SELECT.from('fr.PassengerContext')).map(c => [`${c.travelId}/${c.bookingId}`, c]))
   const held = await heldSeats(d.ID)
-  const affectedBookings = [], alternatives = [], notes = []
-  for (const f of flights) {
+  // One request holds the app's only DB connection while it waits for ABAP, so the flights are read in parallel.
+  const found = await Promise.all(flights.map(async f => {
     const on = await abap.bookingsOn({ carrierId: f.CarrierId, connectionId: f.ConnectionId, flightDate: f.FlightDate })
     const known = on.map(b => [b, context.get(`${b.TravelId}/${b.BookingId}`)]).filter(([, c]) => c)
-    if (!known.length) continue // nobody on this flight we know anything about
+    if (!known.length) return null // nobody on this flight we know anything about
     const n = test => known.filter(([, c]) => test(c)).length
     const atRisk = known.filter(([, c]) => c.arrival === 'Car' && c.approach === d.approach).map(([b]) => booking(b))
-    notes.push(`${known.length} bookings with passenger context on ${flightName(f)}: ${atRisk.length} at risk (driving via ${d.approach}), `
+    const note = `${known.length} bookings with passenger context on ${flightName(f)}: ${atRisk.length} at risk (driving via ${d.approach}), `
       + `${n(c => c.arrival === 'Car' && c.approach !== d.approach)} driving via another approach, ${n(c => c.arrival === 'Train')} by train, `
-      + `${n(c => c.arrival === 'CheckedIn')} checked in${on.length > known.length ? `; ${on.length - known.length} without passenger context are not contacted` : ''}.`)
-    if (!atRisk.length) continue
-    affectedBookings.push(...atRisk)
+      + `${n(c => c.arrival === 'CheckedIn')} checked in${on.length > known.length ? `; ${on.length - known.length} without passenger context are not contacted` : ''}.`
+    if (!atRisk.length) return { note, atRisk, alternatives: [] }
     const route = { carrierId: f.CarrierId, connectionId: f.ConnectionId, flightDate: f.FlightDate, airportFrom: f.AirportFrom, airportTo: f.AirportTo }
     const later = (await abap.sameRoute(route, 0)).filter(a => !a.IsCancelled && at(a.FlightDate, a.DepartureTime) - at(f.FlightDate, f.DepartureTime) >= JAM.gapMin * 6e4)
-    alternatives.push(...later.map(a => alternative(a, f, held)).filter(a => a.seatsAvailable > 0))
-  }
-  // ponytail: seats are summed per listed alternative; a flight listed for two affected flights counts twice in this
-  // note only (propose() checks capacity per flight). Two jammed flights on one route: count distinct flights then.
+    return { note, atRisk, alternatives: later.map(a => alternative(a, f, held)).filter(a => a.seatsAvailable > 0) }
+  }))
+  const reads = found.filter(Boolean) // in the order of the flights
+  const affectedBookings = reads.flatMap(r => r.atRisk), alternatives = reads.flatMap(r => r.alternatives), notes = reads.map(r => r.note)
+  // ponytail: seats are summed per listed alternative; a flight listed for two affected flights counts twice, in the
+  // returned seatsAvailable as well as the note (propose() checks capacity per flight). Two jammed flights on one route: count distinct flights then.
   const seats = alternatives.reduce((n, a) => n + a.seatsAvailable, 0), risk = affectedBookings.length
   return {
     disruption: summary(d), affectedBookings, alternatives, seatsAvailable: seats,
@@ -145,13 +146,17 @@ async function jamBoard(d) {
     { carrierId: i.fromCarrierId, connectionId: i.fromConnectionId, flightDate: i.fromFlightDate })
   const to = (i, f) => flightName({ carrierId: i.toCarrierId, connectionId: i.toConnectionId, flightDate: i.toFlightDate }) === flightName(f)
   const count = (statuses, f) => items.filter(i => statuses.includes(i.status) && to(i, f)).length
-  const rows = []
-  for (const f of own.values()) {
+  // Parallel for the same reason as in jamImpact: ABAP is read while the app's only DB connection is held.
+  const reads = await Promise.all([...own.values()].map(async f => {
     const flight = await abap.flight(f)
-    if (!flight) continue
-    rows.push(load(flight, { affected: true, highlighted: atRisk[flightName(f)] ?? 0 }))
+    if (!flight) return null
     const route = { carrierId: flight.CarrierId, connectionId: flight.ConnectionId, flightDate: flight.FlightDate, airportFrom: flight.AirportFrom, airportTo: flight.AirportTo }
-    for (const a of await abap.sameRoute(route, 0))
+    return { f, flight, later: await abap.sameRoute(route, 0) }
+  }))
+  const rows = []
+  for (const { f, flight, later } of reads.filter(Boolean)) {
+    rows.push(load(flight, { affected: true, highlighted: atRisk[flightName(f)] ?? 0 }))
+    for (const a of later)
       if (at(a.FlightDate, a.DepartureTime) > at(flight.FlightDate, flight.DepartureTime))
         rows.push(load(a, { highlighted: count(['Rebooked'], a), held: d.status === 'Open' ? count(['Offered', 'Accepting'], a) : 0 }))
   }

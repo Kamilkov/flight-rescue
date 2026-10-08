@@ -29,7 +29,7 @@
         <Label text="Reason" labelFor="reason"/>
         <Input id="reason" value="{/form/reason}" maxLength="100"/>
         <Button text="Cancel flight in ABAP" type="Emphasized" press=".onCancel" enabled="{= !${/busy} }"/>
-        <Button text="Replay traffic incident" press=".onReplay" enabled="{= !${/busy} &amp;&amp; !${/replay/running} }"/>
+        <Button text="Replay traffic incident" press=".onReplay" enabled="{= !${/busy} &amp;&amp; !${/replay/running} &amp;&amp; !${/replay/clock} }"/>
         <Text text="{/waiting}" visible="{= !!${/waiting} }" class="sapUiTinyMarginTop"/>
         <Title text="Open disruptions" level="H3" class="sapUiSmallMarginTop"/>
         <List items="{/disruptions}" noDataText="No open disruption" showSeparators="None">
@@ -96,7 +96,7 @@
           <VBox renderType="Bare">
             <HBox class="frRow" renderType="Bare">
               <Text text="{label}"/>
-              <ObjectStatus text="{note}" state="{= ${cancelled} ? 'Error' : ${affected} ? 'Warning' : ${seatsFree} > 0 ? 'Success' : 'None' }"/>
+              <ObjectStatus text="{note}" state="{= ${cancelled} ? 'Error' : ${affected} ? 'Warning' : ${free} > 0 ? 'Success' : 'None' }"/>
             </HBox>
             <fr:SeatMap seatsMax="{seatsMax}" seatsBooked="{seatsBooked}" highlighted="{highlighted}" held="{held}" cancelled="{cancelled}"/>
           </VBox>

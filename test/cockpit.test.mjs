@@ -308,9 +308,21 @@ describe('cockpit logic', () => {
     assert.equal(logic.disruptionLabel({ carrierId: 'LH', connectionId: '0402', flightDate: '2026-10-14' }), 'LH 0402 · 14 Oct')
     assert.equal(logic.disruptionRoute({ airportFrom: 'FRA', airportTo: 'EWR' }), 'FRA–EWR')
     assert.equal(logic.note(load(380, 371, 4, { affected: true })), '4 at risk')
-    assert.equal(logic.note(load(270, 268, 0, { held: 2 })), '2 free, 2 offered')
+    assert.equal(logic.note(load(270, 268, 0, { held: 2 })), '2 offered, none free', 'the 2 free seats are the offered ones')
+    assert.equal(logic.note(load(270, 266, 0, { held: 1 })), '1 offered, 3 free')
+    assert.equal(logic.note(load(270, 268, 0, { held: 5 })), '5 offered, none free', 'never a negative count')
     assert.deepEqual(logic.agentView({ agentStatus: 'Working', kind: 'TrafficJam' }, null).busy, 'The agent is working on the traffic jam')
     assert.equal(logic.planTitle('Offered', false), 'Offers sent')
+  })
+
+  test('a replay read that went through takes back its own error, not another one', () => {
+    assert.deepEqual(logic.replayError('', '', 'The server answered 502.'), { text: 'The server answered 502.', wrote: 'The server answered 502.' }, 'a failed read shows its message')
+    assert.deepEqual(logic.replayError('The server answered 502.', 'The server answered 502.', ''), { text: '', wrote: '' }, 'a good read clears it')
+    assert.deepEqual(logic.replayError('', '', ''), { text: '', wrote: '' }, 'nothing to clear')
+    assert.deepEqual(logic.replayError('ABAP did not deliver the cancellation.', 'The server answered 502.', ''), { text: 'ABAP did not deliver the cancellation.', wrote: '' },
+      'another error has taken the slot: a good read leaves it')
+    assert.deepEqual(logic.replayError('ABAP did not deliver the cancellation.', '', ''), { text: 'ABAP did not deliver the cancellation.', wrote: '' }, 'nothing written by a read: nothing cleared')
+    assert.deepEqual(logic.replayError('', 'The server answered 502.', ''), { text: '', wrote: '' }, 'the dispatcher\'s next action cleared it already')
   })
 
   test('held seats are taken from the free ones, never more', () => {
@@ -493,6 +505,17 @@ describe('passenger page', () => {
     assert.deepEqual([p.els.error.hidden, p.els.error.text], [false, 'CLOSED: Disruption d-1 is closed.'], 'the next poll finds the same card')
     await p.poll(reply(o('Rebooked')))
     assert.deepEqual([p.els.card.dataset.kind, p.els.error.hidden], ['done', true], 'a new card does not keep an error about the old one')
+  })
+
+  test('a 403 is the dispatcher\'s login reused by the browser: the page says to use a private window, on a poll and on Accept', async () => {
+    const forbidden = { status: 403, body: { error: { message: 'Forbidden' } } }
+    const text = 'Signed in as another user. Open this page in a private window.'
+    const p = await phone(forbidden)
+    assert.deepEqual([p.els.error.hidden, p.els.error.text], [false, text])
+    await p.poll(reply(o('Offered')))
+    assert.deepEqual([p.els.error.hidden, p.els.card.dataset.kind], [true, 'offer'])
+    await p.accept(forbidden)
+    assert.deepEqual([p.els.error.hidden, p.els.error.text], [false, text])
   })
 
   test('an Accept that goes through: the card says rebooked, the button is gone and usable again, no error', async () => {

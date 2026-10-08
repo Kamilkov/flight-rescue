@@ -43,6 +43,8 @@
     async function passenger(path, body) {
       const res = await fetch(`/odata/v4/passenger/${path}`, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       const data = await res.json().catch(() => null)
+      // The browser reuses the login of another page on this address (the dispatcher's cockpit); the passenger service refuses it.
+      if (res.status === 403) throw new Error('Signed in as another user. Open this page in a private window.')
       if (!res.ok) throw new Error(data?.error?.message ?? `The server answered ${res.status}.`)
       return data
     }

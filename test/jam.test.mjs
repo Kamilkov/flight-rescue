@@ -34,6 +34,16 @@ const until = async (fn, ms = 20000) => {
   }
 }
 
+/** Runs fn and returns the most calls to abap[name] that were open at once: the jam's reads must overlap, because a
+ *  request holds the app's only DB connection while it waits for ABAP. */
+async function peak(name, fn) {
+  const abap = require('../srv/lib/abap.js'), original = abap[name]
+  let open = 0, most = 0
+  abap[name] = async (...args) => { most = Math.max(most, ++open); try { return await original(...args) } finally { open-- } }
+  try { await fn() } finally { abap[name] = original }
+  return most
+}
+
 /** A jam on the A5 (approach badhomburg), 2 h before the mock's LH 0400 on 2026-10-20 (10:10). */
 async function jam(fields = {}) {
   const ID = randomUUID()
@@ -102,6 +112,15 @@ describe('impact of a traffic jam', () => {
     }
   })
 
+  test('the flights are read from ABAP in parallel, with the same answer', async () => {
+    const ID = await jam({ jamTime: '08:50:00' }) // LH 0400 (80 min later) and DL 0107 (180 min later) are both in the window
+    let impact
+    assert.equal(await peak('bookingsOn', async () => { impact = await agentTool('disruptionImpact', { disruption: ID }) }), 2)
+    assert.equal(await peak('sameRoute', () => agentTool('disruptionImpact', { disruption: ID })), 1, 'only LH 0400 has bookings at risk')
+    assert.deepEqual(impact.affectedBookings.map(b => `${b.travelId}/${b.bookingId}`), ['90000101/0001', '90000101/0002', '90000102/0001', '90000102/0002'])
+    assert.deepEqual(impact.alternatives.map(a => [a.carrierId, a.connectionId]), [['DL', '0107'], ['LH', '0404']])
+  })
+
   test('the impact of a closed jam is refused', async () => {
     const ID = await jam({ status: 'Closed' })
     await assert.rejects(agentTool('disruptionImpact', { disruption: ID }), /CLOSED/)
@@ -149,6 +168,19 @@ describe('seat board of a traffic jam', () => {
     const row = f => [f.carrierId, f.connectionId, f.affected, f.cancelled, f.highlighted, f.held, f.seatsFree]
     assert.deepEqual(ok(await get(`flightBoard(disruption=${ID})`)).value.map(row), [
       ['LH', '0400', true, false, 4, 0, 9], ['DL', '0107', false, false, 0, 0, 2], ['LH', '0404', false, false, 0, 0, 3]])
+  })
+})
+
+describe('seat board of a traffic jam: reads', () => {
+  test('the own flights are read from ABAP in parallel, rows in order', async () => {
+    const ID = await jam()
+    const item = { travelId: '90000101', bookingId: '0001', fromCarrierId: 'DL', fromConnectionId: '0107', fromFlightDate: '2026-10-20',
+      toCarrierId: 'LH', toConnectionId: '0404', toFlightDate: '2026-10-20', status: 'Offered' }
+    await INSERT.into('fr.Plans').entries({ ID: randomUUID(), disruption_ID: ID, status: 'Offered', items: [item] })
+    let rows
+    assert.equal(await peak('flight', async () => { rows = ok(await get(`flightBoard(disruption=${ID})`)).value }), 2, 'LH 0400 (at risk) and DL 0107 (offered from)')
+    assert.deepEqual(rows.map(f => [f.carrierId, f.connectionId, f.affected]),
+      [['LH', '0400', true], ['DL', '0107', false], ['LH', '0404', false], ['DL', '0107', true], ['LH', '0404', false]])
   })
 })
 
@@ -218,10 +250,10 @@ describe('the agent and a traffic jam', () => {
     await assert.rejects(agentTool('sendOffers', { plan: r.plan }), /NOT_REVIEWED/)
   })
 
-  test('the server\'s kickoff message names the jam and the delay', () => {
+  test('the server\'s kickoff message names the jam; its reason carries the delay', () => {
     const { prompt } = require('../srv/lib/agent-start.js')
-    assert.equal(prompt({ kind: 'TrafficJam', airportFrom: 'FRA', ID: 'd-1', reason: 'A3 jam', delayMinutes: 25 }),
-      'Traffic jam at FRA (disruption d-1): A3 jam, about 25 min. Offer the passengers at risk a later flight.')
+    assert.equal(prompt({ kind: 'TrafficJam', airportFrom: 'FRA', ID: 'd-1', reason: 'A3 jam, drive time +25 min', delayMinutes: 25 }),
+      'Traffic jam at FRA (disruption d-1): A3 jam, drive time +25 min. Offer the passengers at risk a later flight.')
     assert.equal(prompt({ carrierId: 'LH', connectionId: '0402', flightDate: '2026-10-14', ID: 'd-2' }),
       'LH 0402 on 2026-10-14 was cancelled in the booking system (disruption d-2). Rebook the passengers.')
   })

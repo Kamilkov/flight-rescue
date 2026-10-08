@@ -1,14 +1,14 @@
 // Builds srv/traffic/data/incident.json, the traffic replay's data, from the airport-traffic spike's results.
-//   node scripts/import-incident.mjs [results dir]              a real incident: replay-incident.csv, replay-jams.csv, fra_jam_geo.csv
-//   node scripts/import-incident.mjs [results dir] --simulate   no usable incident: a labelled simulated jam over a recorded calm morning
+//   node scripts/import-incident.mjs <results dir>              a real incident: replay-incident.csv, replay-jams.csv, fra_jam_geo.csv
+//   node scripts/import-incident.mjs <results dir> --simulate   no usable incident: a labelled simulated jam over a recorded calm morning
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const args = process.argv.slice(2), simulate = args.includes('--simulate')
-const dir = args.find(a => !a.startsWith('--')) ?? join(homedir(), 'Code/Working/demos/airport-traffic/results')
+const dir = args.find(a => !a.startsWith('--'))
+if (!dir) { console.error('Usage: node scripts/import-incident.mjs <results dir> [--simulate]'); process.exit(2) }
 const ROADS = { wiesbaden: ['A66', 'A3'], badhomburg: ['A5'], offenbach: ['A3'], darmstadt: ['A5', 'A67'] }
 
 // The spike's CSVs come from Python's csv module: commas, and quotes doubled inside quoted fields (geometry is JSON).

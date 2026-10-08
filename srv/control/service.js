@@ -36,8 +36,11 @@ module.exports = class ControlService extends cds.ApplicationService {
     this.on('pauseReplay', req => traffic.pause(req.data.paused))
     this.on('stepReplay', () => traffic.step())
     this.on('resetDemo', async () => {
-      await traffic.stop() // first: a step of a running replay must not open a disruption after the reset
-      if (abap.connected()) demoFlight = await abap.resetDemo() // first: if ABAP refuses, the app keeps its state
+      // stop() must stay before the first DB statement: it waits for a step whose INSERT needs the app's only connection, which this
+      // request holds from its first statement on, so below the DELETEs a Reset during the firing step would deadlock. It also
+      // means no step opens a disruption after the reset.
+      await traffic.stop()
+      if (abap.connected()) demoFlight = await abap.resetDemo() // before the DELETEs: if ABAP refuses, the disruptions and plans stay (the replay is already stopped by then)
       else await abap.resetMockCancellations()
       await DELETE.from('fr.PlanItems')
       await DELETE.from('fr.Plans')

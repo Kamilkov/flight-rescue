@@ -2,9 +2,11 @@
 
 A flight is cancelled. A **CAP-level agent** (`@cap-js/agents`, [Sep 2026 release](https://cap.cloud.sap/docs/releases/2026/sep26#new-cap-level-agents)) reads the affected bookings from your **ABAP trial**, proposes moving them to other flights on the same route, and **pauses for a dispatcher to approve**. Only after approval are the bookings moved in ABAP, one by one, through a custom RAP action.
 
-The server decides what is valid, the model only chooses among listed options, and the one action that changes data is `@agent.hitl`.
+The server decides what is valid, the model only chooses among listed options, and both of the agent's actions that change anything (`applyRebooking`, `sendOffers`) are `@agent.hitl`. A passenger's Accept, after a traffic jam, moves a booking in ABAP outside the agent.
 
 The flight is cancelled in ABAP itself: a RAP business event reports it to the app, which starts the agent on its own. The dispatcher meets it at the approval card.
+
+The agent has a second trigger, no cancellation needed: a traffic jam on the way to the airport, answered with offers a passenger can accept. See [The traffic jam](#the-traffic-jam-post-3).
 
 ```
  cockpit ──cancelFlight──▶ ControlService ──OData V4──▶ ABAP trial: ZR_FR_FlightCancel (create, precheck)
@@ -13,8 +15,8 @@ The flight is cancelled in ABAP itself: a RAP business event reports it to the a
                           EventsService /events ◀─────────┘ (user abap-events, role EventSource)
                                 │ opens the disruption, starts the agent as the dispatcher (A2A)
                                 ▼
-                     RebookAgentService (@agent, ReAct loop in CAP) ── pauses at applyRebooking (@agent.hitl)
-                                │ tools: query, describe, disruptionImpact, proposeRebooking, applyRebooking
+                     RebookAgentService (@agent, ReAct loop in CAP) ── pauses at applyRebooking, sendOffers (@agent.hitl)
+                                │ tools: query, describe, disruptionImpact, proposeRebooking, applyRebooking, sendOffers
                      srv/lib/rebook.js ── rules, plans (SQLite) ── srv/lib/abap.js ──OData V4──▶ ZFR_REBOOK
 ```
 
@@ -128,11 +130,11 @@ The agent's second trigger. No flight is cancelled: a jam on the way to the airp
 4. **Offers:** the agent proposes a later flight for each booking at risk and calls `sendOffers`; the dispatcher presses **Send offers**.
 5. **Accept:** `/passenger/index.html` shows the passenger their offer; **Accept** has ABAP move that one booking.
 
-While a replay exists (until **Reset demo**), a Traffic panel fills the bottom half of the cockpit: clock, chart, latest report, the rule and a map. **Pause** and **Resume** freeze the replay, not the agent; **Step ▸** plays one sample while paused (refused otherwise with `NO_REPLAY` or `NOT_PAUSED`).
+While a replay exists (until **Reset demo**), a Traffic panel fills the bottom half of the cockpit: clock, chart, latest report, the rule and a map. **Pause** and **Resume** freeze the replay, not the agent; **Step ▸** plays one sample while paused. Pause without a replay answers `NO_REPLAY`, Step unless paused answers `NOT_PAUSED`.
 
-**Running it.** Against the mock: `npm run watch`, **Replay traffic incident**, **Send offers** when the plan appears, then http://localhost:4004/passenger/index.html as `passenger` (empty password); restart the app between runs. Against ABAP, press **Reset demo** first and after every restart: the app learns the scenario's flight from it (refused with `NO_SCENARIO` without).
+**Running it.** Against the mock: `npm run watch`, **Replay traffic incident**, **Send offers** when the plan appears, then http://localhost:4004/passenger/index.html as `passenger` (empty password) in a private window or another browser: the browser reuses the dispatcher's login for the address, and the passenger service refuses it (403); restart the app between runs. Against ABAP, press **Reset demo** first and after every restart: the app learns the scenario's flight from it (refused with `NO_SCENARIO` without).
 
-**The scenario** is LH 0400 FRA–JFK with 9 scenario bookings (travels 90000101–105); in the mock it flies on 2026-10-20 with DL 0107 and LH 0404 later that day. In ABAP, `ZCL_FR_GENERATE_DATA` picks the day ([below](#the-abap-event-and-the-vps)), and the flight may also carry bookings copied from /DMO/, which have no passenger context and are not contacted. The recording, `srv/traffic/data/incident.json`, comes from a separate 48 h probe (not in this repo) through `scripts/import-incident.mjs`; `--simulate` makes a labelled simulated jam instead.
+**The scenario** is LH 0400 FRA–JFK with 9 scenario bookings (travels 90000101–105); in the mock it flies on 2026-10-20 with DL 0107 and LH 0404 later that day. In ABAP, `ZCL_FR_GENERATE_DATA` picks the day ([below](#the-abap-event-and-the-vps)), and the flight may also carry bookings copied from /DMO/, which have no passenger context and are not contacted. The recording, `srv/traffic/data/incident.json`, comes from a separate 48 h probe (not in this repo) through `scripts/import-incident.mjs <results dir>`; `--simulate` makes a labelled simulated jam instead.
 
 **What is simulated.** The jam is real. The passenger context is not (`db/data/fr-PassengerContext.csv`): of the 9 scenario bookings, 4 drive via Bad Homburg, 1 via Darmstadt, 2 take the train and 2 have checked in, and the `passenger` user stands for 90000102/0001. Nor is the demo clock (FRA local time): the recording is shifted so that the rule fires 2 h before the flight leaves (`LEAD_MIN`). The cockpit's label says the passenger context is simulated, and the phone page says it stands for the airline's app.
 
@@ -191,7 +193,7 @@ The cockpit, on the same day and system: Reset demo seeded the scenario for LH 0
   proxied to `flight-rescue:4004`. `PASSENGER_PASSWORD` is the
   password of the app's `passenger` user, and Caddy holds its hash. The roles keep the two users apart: the control
   service and the agent need `Dispatcher`, `PassengerService` needs `Passenger`. The phone opens `/passenger/index.html`
-  on that host; the tunnel URL, http://localhost:4024/passenger/index.html, is for the laptop (login `passenger`).
+  on that host; the tunnel URL, http://localhost:4024/passenger/index.html, is for the laptop (login `passenger`, in a private window or another browser: the browser reuses the dispatcher's login for this address, and the passenger service refuses it with 403).
 - **Live check, traffic:** `APP_URL=http://localhost:4024 node --env-file=<secrets> scripts/live-check.mjs traffic`
   resets the demo, replays the incident, approves the offers as `dispatcher`, accepts the phone booking's offer as
   `passenger` (`DISPATCHER_PASSWORD` and `PASSENGER_PASSWORD` come from the secrets file) and exits 0 only if that
