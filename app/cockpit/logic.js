@@ -41,7 +41,31 @@ sap.ui.define([], () => {
     for (let i = max - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [order[i], order[j]] = [order[j], order[i]] }
     const h = d.highlighted, b = h + d.booked, o = b + d.held
     order.forEach((seat, k) => { seats[seat] = k < h ? 'h' : k < b ? 'b' : k < o ? 'o' : 'f' })
-    return { groups: max <= 200 ? [3, 3] : max <= 300 ? [2, 4, 2] : [3, 4, 3], seats }
+    return { groups: groupsFor(max), seats }
+  }
+
+  /** Seats abreast: one aisle up to 200 seats, then two. */
+  const groupsFor = max => max <= 200 ? [3, 3] : max <= 300 ? [2, 4, 2] : [3, 4, 3]
+
+  /** The plane's parts in seat sizes (a seat is 1): gaps, aisles, the fuselage's padding, tail and nose, and how far the
+   *  wings reach out. SeatMap draws with these; planeSize and seatSize measure with them. */
+  const PLANE = { gap: 0.3, aisle: 0.8, pad: 1.4, tail: 6.8, nose: 9.2, out: 2.8 }
+
+  /** A plane's length and height, wings included, in seat sizes. */
+  function planeSize(groups, seats) {
+    const abreast = groups.reduce((a, b) => a + b, 0), cols = Math.ceil(seats / abreast)
+    const column = abreast + (abreast - groups.length) * PLANE.gap + (groups.length - 1) * PLANE.aisle
+    return { w: PLANE.tail + cols + (cols - 1) * PLANE.gap + PLANE.nose + 1, h: column + 2 * PLANE.pad + 2 * PLANE.out, cols, column }
+  }
+
+  /** The seat size (px) for the board's planes: the largest at which all of them fit a box of width × height, each beside
+   *  its label column (`label` px) and stacked `gap` px apart. Half pixels keep the seats sharp; 3.5 to 12 keeps them
+   *  readable. ponytail: the label column's own height is ignored; it is lower than any plane down to about 3.5 px. */
+  function seatSize(board, width, height, label = 136, gap = 8) {
+    const planes = board.map(f => { const d = dots(f), max = d.highlighted + d.booked + d.held + d.free; return max > 1 && planeSize(groupsFor(max), max) }).filter(Boolean)
+    if (!planes.length) return 5
+    const fit = Math.min((width - label) / Math.max(...planes.map(p => p.w)), (height - gap * (planes.length - 1)) / planes.reduce((a, p) => a + p.h, 0))
+    return Math.min(12, Math.max(3.5, Math.floor(fit * 2) / 2))
   }
 
   /** The Disruption pane's error text after a replay read. A failed read writes its message there; a good one takes back
@@ -274,5 +298,5 @@ sap.ui.define([], () => {
     }
   }
 
-  return { flightLabel, flightWhen, note, dots, cabin, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick, mobileStatus, disruptionLabel, disruptionRoute, chart, chartSvg, replayView, replayError, demoMode, baseMap: BASE_MAP }
+  return { flightLabel, flightWhen, note, dots, cabin, PLANE, planeSize, seatSize, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick, mobileStatus, disruptionLabel, disruptionRoute, chart, chartSvg, replayView, replayError, demoMode, baseMap: BASE_MAP }
 })

@@ -1,12 +1,12 @@
 // One flight's cabin as an aircraft seen from above: booked, highlighted (affected or moved passengers), held (offered,
 // not answered yet), free. Counts only; there are no seat numbers in the data, so logic.cabin places the seats, seeded by
-// the flight. A one-seat map is a single seat: the legend's swatch.
+// the flight. A one-seat map is a single seat: the legend's swatch. Every length is a multiple of the seat size, the CSS
+// variable --frS, which the cockpit sets so that the planes fill the pane (logic.seatSize).
 sap.ui.define(['sap/ui/core/Control', './logic'], (Control, logic) => {
   'use strict'
   const CLASS = { h: 'frSeatHot', b: 'frSeatBooked', o: 'frSeatHeld', f: 'frSeatFree' }
-  // The aircraft in px, from a 5 px seat: gaps, aisles, the fuselage's padding, tail and nose, and how far the wings reach out.
-  const S = 5, GAP = 1.5, AISLE = 4, PAD = 7, TAIL = 34, NOSE = 46, OUT = 14
-  const px = v => `${Math.round(v * 10) / 10}px`
+  const { pad: PAD, tail: TAIL, out: OUT } = logic.PLANE
+  const inSeats = v => `calc(var(--frS) * ${Math.round(v * 100) / 100})`
   return Control.extend('fr.cockpit.SeatMap', {
     metadata: {
       properties: {
@@ -27,22 +27,21 @@ sap.ui.define(['sap/ui/core/Control', './logic'], (Control, logic) => {
           rm.openStart('i', control).class('frSeat').class(CLASS[seats[0] ?? 'f']).attr('aria-hidden', 'true').openEnd().close('i')
           return
         }
-        const d = logic.dots(f), abreast = groups.reduce((a, b) => a + b, 0), cols = Math.ceil(seats.length / abreast)
-        const colH = abreast * S + (abreast - groups.length) * GAP + (groups.length - 1) * AISLE, cabinL = cols * S + (cols - 1) * GAP
-        const fusH = colH + 2 * PAD, w = TAIL + cabinL + NOSE + S, mid = OUT + fusH / 2
+        const d = logic.dots(f), abreast = groups.reduce((a, b) => a + b, 0), { w, h, cols, column } = logic.planeSize(groups, seats.length)
+        const cabinL = w - TAIL - logic.PLANE.nose - 1, fusH = column + 2 * PAD, mid = OUT + fusH / 2
         rm.openStart('div', control).class('frPlane')
         if (control.getCancelled()) rm.class('frSeatMapCancelled')
-        rm.style('width', px(w)).style('height', px(fusH + 2 * OUT))
+        rm.style('width', inSeats(w)).style('height', inSeats(h))
         rm.attr('role', 'img').attr('aria-label', `${d.booked + d.highlighted} seats booked, ${d.highlighted} of them highlighted, ${d.held} offered, ${d.free} free`).openEnd()
-        const part = (cls, style) => { rm.openStart('i').class(cls); for (const [k, v] of Object.entries(style)) rm.style(k, px(v)); rm.openEnd().close('i') }
+        const part = (cls, style) => { rm.openStart('i').class(cls); for (const [k, v] of Object.entries(style)) rm.style(k, inSeats(v)); rm.openEnd().close('i') }
         const wing = { left: TAIL + cabinL * 0.36, width: cabinL * 0.34, height: OUT + fusH / 2 }
         part('frWing frWingUp', { ...wing, top: 0 })
         part('frWing frWingDown', { ...wing, top: mid })
-        part('frWing frStabUp', { top: OUT * 0.25, width: TAIL + 2 * S, height: OUT * 0.75 + fusH / 2 })
-        part('frWing frStabDown', { top: mid, width: TAIL + 2 * S, height: OUT * 0.75 + fusH / 2 })
+        part('frWing frStabUp', { top: OUT * 0.25, width: TAIL + 2, height: OUT * 0.75 + fusH / 2 })
+        part('frWing frStabDown', { top: mid, width: TAIL + 2, height: OUT * 0.75 + fusH / 2 })
         part('frFuselage', { top: OUT, width: w, height: fusH })
-        part('frShield', { left: w - 3 * S, top: mid - 1.2 * S })
-        rm.openStart('div').class('frCabin').style('left', px(TAIL)).style('top', px(OUT + PAD)).openEnd()
+        part('frShield', { left: w - 3, top: mid - 1.2 })
+        rm.openStart('div').class('frCabin').style('left', inSeats(TAIL)).style('top', inSeats(OUT + PAD)).openEnd()
         for (let c = 0; c < cols; c++) {
           rm.openStart('div').class('frCol').openEnd()
           let k = c * abreast

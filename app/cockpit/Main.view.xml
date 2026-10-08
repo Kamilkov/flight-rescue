@@ -100,7 +100,7 @@
         </HBox>
       </VBox>
 
-      <VBox class="frPane frPane3" renderType="Bare">
+      <VBox id="bookingPane" class="frPane frPane3" renderType="Bare">
         <HBox class="frPaneHead" renderType="Bare">
           <Text class="frStep" text="3"/><Title text="Booking system" level="H2"/>
           <Text class="frTag" text="{= ${/backend} === 'abap' ? 'ABAP' : 'mock' }" visible="{= !!${/backend} }"/>
@@ -114,7 +114,7 @@
         </HBox>
         <MessageStrip text="{/errors/board}" type="Error" showIcon="true" visible="{= !!${/errors/board} }"/>
         <Text text="Cancel a flight or replay a traffic incident to see its route." visible="{= ${/board}.length === 0 }"/>
-        <VBox class="frBoard" items="{/board}" renderType="Bare">
+        <VBox id="board" class="frBoard" items="{/board}" renderType="Bare">
           <HBox class="frFlight" renderType="Bare">
             <VBox class="frFlightInfo" renderType="Bare">
               <Text class="frStrong" text="{name}"/>

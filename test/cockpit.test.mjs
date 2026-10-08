@@ -348,6 +348,16 @@ describe('cockpit logic', () => {
     assert.deepEqual(logic.cabin({}, 'x'), { groups: [3, 3], seats: [] })
   })
 
+  test('the planes\' seat size: the largest at which they all fit the pane, in half pixels from 3.5 to 12', () => {
+    // A 380-seat plane (3-4-3, 38 rows) is 66.1 seats long and 22.1 high with its wings; a 270-seat one (2-4-2) 19.5 high.
+    const abap = [load(380, 371, 4), load(380, 380, 0), load(270, 268, 0), load(380, 377, 0)]
+    assert.equal(logic.seatSize(abap, 900, 640), 7, 'a tall pane: the height runs out first, (640 - 3 gaps) / 85.8')
+    assert.equal(logic.seatSize(abap, 600, 330), 3.5, 'the replay\'s half-height pane: smaller, but all four fit')
+    assert.equal(logic.seatSize([load(380, 0, 0)], 600, 2000), 7, 'a narrow pane: the width runs out first, (600 - the label column) / 66.1')
+    assert.equal(logic.seatSize([load(380, 0, 0)], 3000, 3000), 12, 'never larger than 12')
+    assert.equal(logic.seatSize([], 900, 640), 5, 'no flights: the default')
+  })
+
   test('a flight\'s departure for the seat board', () => {
     assert.equal(logic.flightWhen({ flightDate: '2026-10-20', departureTime: '10:10:00' }), '20 Oct · 10:10')
     assert.equal(logic.flightWhen({ flightDate: '2026-10-20' }), '20 Oct')

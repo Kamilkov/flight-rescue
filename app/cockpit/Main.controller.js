@@ -36,6 +36,20 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       })
     },
 
+    // The planes fill the Booking system pane: one seat size for all of them, the largest at which they fit (logic.seatSize),
+    // set as a CSS variable on the pane, so a resize redraws nothing. The pane's element outlives the board's re-renders.
+    onAfterRendering() {
+      const pane = this.byId('bookingPane').getDomRef()
+      if (!pane || pane === this.observed) return
+      this.observed = pane
+      new ResizeObserver(() => this.fitBoard()).observe(pane)
+    },
+
+    fitBoard() {
+      const pane = this.byId('bookingPane').getDomRef(), board = this.byId('board').getDomRef()
+      if (pane && board) pane.style.setProperty('--frS', `${logic.seatSize(this.get('/board'), board.clientWidth, board.clientHeight)}px`)
+    },
+
     get(path) { return this.model.getProperty(path) },
     set(path, value) { this.model.setProperty(path, value) },
 
@@ -95,6 +109,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       try {
         const board = d ? (await control(`flightBoard(disruption=${d.ID})`)).value : []
         this.set('/board', board.map(f => ({ ...f, name: `${f.carrierId} ${f.connectionId}`, when: logic.flightWhen(f), note: logic.note(f), free: logic.dots(f).free })))
+        this.fitBoard()
         this.set('/errors/board', '')
         if (planID) {
           const p = await control(`Plans(${planID})?$expand=items`), groups = logic.groupPlan(p.items)
