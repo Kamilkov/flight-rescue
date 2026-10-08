@@ -25,14 +25,16 @@ The flight is cancelled in ABAP itself: a RAP business event reports it to the a
 | `abap/` | ABAP sources to create in ADT: table, generator class, CDS views, behavior, service definition |
 | `srv/external/` | The ZFR_REBOOK contract as CDS, and the mock used when no ABAP system is configured (same checks and messages as the ABAP action) |
 | `srv/rebook-agent/` | The `@agent` service. Its doc comment is the system prompt |
-| `srv/control/` | OData service for dispatchers: cancel a flight in ABAP, close a disruption, read plans |
+| `srv/control/` | OData service for dispatchers: cancel a flight in ABAP, replay the traffic incident, close a disruption, read plans |
 | `srv/events/` | REST service for the booking system: ABAP reports a cancelled flight here |
-| `srv/lib/agent-start.js` | Starts the agent for a reported cancellation, as the dispatcher on duty |
-| `scripts/live-check.mjs` | Cancels the demo flight on the deployed app and waits for ABAP's event and the agent |
+| `srv/lib/agent-start.js` | Starts the agent for a reported cancellation or an opened traffic jam, as the dispatcher on duty |
+| `scripts/live-check.mjs` | Cancels the demo flight on the deployed app and waits for ABAP's event and the agent; `traffic` replays the jam and accepts the offer |
 | `Dockerfile` | The container that runs next to the ABAP trial on the VPS |
-| `srv/lib/` | `abap.js` (the only module that calls ABAP) and `rebook.js` (impact, propose, apply) |
+| `srv/lib/` | `abap.js` (the only module that calls ABAP), `rebook.js` (impact, propose, apply, send offers, accept) and `traffic.js` (the replay and its rule) |
+| `srv/traffic/data/incident.json`, `scripts/import-incident.mjs` | The recorded jam the replay plays, and the script that builds it |
+| `srv/passenger/`, `app/passenger/` | The passenger's phone: their offer after a traffic jam, and Accept (an OData service and a plain HTML page) |
 | `app/cockpit/` | The dispatcher's page (SAPUI5, no build step): cancel a flight, follow the agent, approve, watch the seats |
-| `db/schema.cds` | What this app owns: disruptions, plans, plan items |
+| `db/schema.cds` | What this app owns: disruptions, plans, plan items and the simulated passenger context |
 | `test/` | `node --test` suites with a scripted model (no key, no network) |
 
 ## Run locally against the mock
@@ -46,7 +48,7 @@ export ANTHROPIC_API_KEY=...   # the agent uses claude-opus-5-5 (cds.requires.ll
 npm run watch                  # http://localhost:4004
 ```
 
-Without `ABAP_URL`, ZFR_REBOOK is mocked from `srv/external/` with /DMO/-shaped sample data. Sign in with `dispatcher` (empty password). `viewer` has no role and is refused.
+Without `ABAP_URL`, ZFR_REBOOK is mocked from `srv/external/` with /DMO/-shaped sample data. Sign in with `dispatcher` (empty password); `passenger` is for the phone page of [the traffic jam](#the-traffic-jam-post-3). `viewer` has no role and is refused.
 
 1. Open the cockpit (below) and press **Cancel flight in ABAP**. The mock checks the flight like ABAP does, then
    reports the cancellation to the app in-process, as ABAP's event handler would over HTTP.
@@ -116,6 +118,24 @@ Things to check against your published binding:
 - **Leading zeros:** the binding returns NUMC fields without them (`"ConnectionId":"926"`, `"TravelId":"4506"`) and accepts them with. `srv/lib/abap.js` pads what it reads, so the rest of the app and the mock use the /DMO/ form (`0926`, `00004506`).
 - **Action namespace:** bound actions are called at `…/Bookings(TravelId='…',BookingId='…')/<namespace>.rebook`. The default is `com.sap.gateway.srvd_a2x.zfr_rebook.v0001`. If your `$metadata` shows a different `Schema Namespace`, set `cds.requires.ZFR_REBOOK.actionNamespace`.
 
+## The traffic jam (post #3)
+
+The agent's second trigger. No flight is cancelled: a jam on the way to the airport puts some passengers at risk of missing theirs, and each of them gets an offer for a later flight. Nobody moves unless they accept.
+
+1. **Replay:** **Replay traffic incident** in the cockpit plays a recorded jam onto the scenario flight's morning, one sample every 2 s (about 30 s in all). The recording is the A5 towards Darmstadt near the airport on Tue 2026-10-06, about 16:10–16:40 CEST: drive times to Terminal 1 from four approaches every 10 min (Google Routes: live, and "typical", the same request a week later) and the Autobahn API's jam reports.
+2. **Rule:** an approach at least 6 min over typical for 2 samples in a row (`RULE` in `srv/lib/traffic.js`). On the Bad Homburg approach it fires at +6.1, then +8.4 min, while the Autobahn report still says 5 min; the report then grows to 12 and 19 min. The drive time peaks at +9.6 min because Google reroutes drivers via the A66.
+3. **Disruption:** the server opens a `TrafficJam` disruption and starts the agent as the dispatcher, as ABAP's event does for a cancellation. Its `delayMinutes` is the drive-time delay the rule measured (+8). Its reason keeps the report's road, place, direction and type: "A5 Frankfurt am Main-Niederrad - Frankfurt am Main-Flughafen-Nord → Darmstadt: slow traffic (Autobahn report), drive time +8 min".
+4. **Offers:** the agent proposes a later flight for each booking at risk and calls `sendOffers` (`@agent.hitl`). The dispatcher presses **Send offers**; nothing changes in ABAP yet.
+5. **Accept:** `/passenger/index.html` shows the passenger their offer, and **Accept** has ABAP move that one booking through the same `rebook` action. Only the booking marked `phone` can answer: the other offers stay open and hold their seats until the dispatcher closes the disruption.
+
+While a replay exists (until **Reset demo**), a Traffic panel takes the bottom half of the cockpit: the demo clock, a chart of drive time over typical per approach, the latest Autobahn report, where the rule fired and a map with the jam's line. **Pause** and **Resume** freeze the replay, not the agent. **Step ▸** plays one sample while paused (`pauseReplay`, `stepReplay`; 409 `NO_REPLAY` or `NOT_PAUSED`).
+
+**Running it.** Against the mock: `npm run watch`, **Replay traffic incident** in the cockpit, **Send offers** once the plan appears (the rule fires after about 14 s), then http://localhost:4004/passenger/index.html signed in as `passenger` (empty password). An accepted booking stays moved in the mock until the app restarts, so restart it before the next run. Against ABAP, press **Reset demo** first, and again after every restart of the app: that is how the app learns the scenario's flight, and without it the replay refuses with `NO_SCENARIO`.
+
+**The scenario** is LH 0400 FRA–JFK with 9 bookings (travels 90000101–105). In the mock it flies on 2026-10-20 at 10:10, with DL 0107 and LH 0404 later that day (2 and 3 free seats). In ABAP, `ZCL_FR_GENERATE_DATA` builds it on a day it picks and names the flight on its `TRAFFIC_FLIGHT` line ([below](#the-abap-event-and-the-vps)). The firing sample lands 2 h before the flight departs (`LEAD_MIN`). `srv/traffic/data/incident.json` is the recording (63 samples, 4 reports, a 24-point map line). `scripts/import-incident.mjs` builds it from the results of a separate 48 h probe, which is not in this repo; with `--simulate` it makes a labelled simulated jam when the probe found no real one.
+
+**What is simulated.** The jam is real; two things around it are not. The passenger context (`db/data/fr-PassengerContext.csv`) says how each of the 9 bookings gets to the airport: 4 drive via Bad Homburg, 1 via Darmstadt, 2 take the train, 2 have checked in. The `passenger` user stands for one of them (90000102/0001). And the demo clock is FRA local time, with the recording shifted onto the scenario's day. The cockpit's label reads "Replay of a jam recorded on 2026-10-06 · passenger context simulated", and the phone page says it stands for the airline's app.
+
 ## Design choices
 
 - **Human in the loop.** `applyRebooking` is `@agent.hitl`: the A2A task goes to `input-required`, and nothing reaches ABAP until a dispatcher approves. Reject closes the task and the plan stays `Pending` until superseded.
@@ -124,6 +144,9 @@ Things to check against your published binding:
 - **ABAP is the authority.** Each booking is moved with an expected current flight, so a booking changed in ABAP after the proposal fails alone (`STALE`) and the rest still apply (`PartiallyApplied`). Each item records ABAP's answer.
 - **Narrow agent.** `@agent.connect: 'none'` means no MCP servers and no subagents. There is deliberately no `AGENTS.md`: with one, the plugin builds a deep agent with file and subagent tools. The system prompt is the service's doc comment instead.
 - **Minimal data to the model.** The model sees travel and booking IDs, flights and seat counts. It doesn't see customer data.
+- **Nobody has to move for a jam.** A jam plan is a set of offers; the dispatcher approves sending them (`sendOffers`, `@agent.hitl`), and each passenger answers alone: ABAP moves a booking only when its passenger accepts. `applyRebooking` and `sendOffers` refuse each other's plans (`WRONG_KIND`).
+- **The server picks who is at risk.** Drivers via the jammed approach, on flights leaving 60–180 min after the jam. An offer is a flight on the same route that day, leaving at least 45 min after the booking's own, with a seat free. The model sees booking references and counts, never the passenger context, which no service the agent can reach exposes. Bookings without context are not contacted.
+- **Offers hold seats.** Seats offered and not answered yet count as taken for every disruption, cancellations included, until the passenger answers or the dispatcher closes the jam.
 - **SAP API Policy.** The agent only exposes this app's own services and a custom `Z` RAP service, which is within what the CAP docs allow for CAP-level agents. It does not proxy SAP application APIs.
 
 ## Tests
@@ -136,7 +159,10 @@ npm test
 - `test/remote.test.mjs`: the same flow over HTTP. The mock runs as a separate server that requires a login, and this app reaches it only through `ABAP_URL`/`SAP_USER`/`SAP_PASSWORD`. Covers CAP's OData queries, basic auth, the explicit bound-action path and OData error messages.
 - `test/events.test.mjs`: ABAP's event: only `abap-events` may report, a repeat changes nothing, the agent starts as the dispatcher and its paused task is the dispatcher's to approve; an idle or failing agent ends `Done` or `Failed`.
 - `test/auth.test.mjs`: with `DISPATCHER_PASSWORD` / `ABAP_EVENTS_PASSWORD` set, the mocked users need them.
-- `test/cockpit.test.mjs`: the cockpit's operations (`flightBoard`, `demoInfo`, `resetDemo`, the ADT call against a stand-in) and the page's logic and A2A client, loaded without a browser.
+- `test/cockpit.test.mjs`: the cockpit's operations (`flightBoard`, `demoInfo`, `resetDemo`, the ADT call against a stand-in) and the page's logic and A2A client, loaded without a browser. Also the Traffic panel's chart, card and map data, and the passenger page.
+- `test/jam.test.mjs`: the traffic scenario's data, a jam's impact (who is at risk, the 60–180 min window, the flights offered), seats held by offers until the jam is closed, refused proposals, the jam's seat board, and the agent: it pauses at `sendOffers`, approval changes nothing in ABAP, and `applyRebooking` and `sendOffers` refuse each other's plans.
+- `test/traffic.test.mjs`: the trigger rule, the replay on the demo clock and the `TrafficJam` it opens, one replay at a time, a reset during one, Pause, Resume and Step, and the shipped `incident.json`. A short fixture incident and a 20 ms step keep it fast.
+- `test/passenger.test.mjs`: the phone's service: only `passenger` reads and accepts, no offer before **Send offers**, Accept moves the booking once, ABAP's refusal comes back as the offer's answer, and a closed jam takes no answers.
 
 **Verified on 2026-09-30** against an ABAP Platform Trial (A4H, release 816, package `$ZFLIGHT_RESCUE`) with `claude-opus-5-5`: all objects active, 13,144 bookings generated, binding published. Through the chat preview, an approved plan moved 3 bookings from UA 0926 to UA 0058 on 2027-02-28 (seats booked 3 → 0 and 0 → 3 in `ZI_FR_Flight`); a rejected plan for NQ 0802 changed nothing. Called directly, the action refused with `STALE`, `NO_FLIGHT`, `ROUTE` and `NO_BOOKING`. Not exercised against ABAP: `CANCELLED` and `FULL` (the generated data has no cancelled booking and no full flight), a partially applied plan, and a BTP ABAP environment with a communication arrangement. The tests use a scripted model and the mock.
 
@@ -152,9 +178,23 @@ The cockpit, on the same day and system: Reset demo seeded the scenario for LH 0
 - **SM59 `ZFR_CAP_EVENTS`:** type G, host `flight-rescue`, port 4004, Basic authentication `abap-events`.
 - **Container:** service `flight-rescue` in the VPS's compose stack, on the same Docker network as the ABAP trial,
   bound to `127.0.0.1:4024` only. `flight-rescue.env` holds `ANTHROPIC_API_KEY`, `SAP_USER`, `SAP_PASSWORD`,
-  `DISPATCHER_PASSWORD`, `ABAP_EVENTS_PASSWORD`, `ABAP_URL`, `ABAP_CLIENT`.
+  `DISPATCHER_PASSWORD`, `ABAP_EVENTS_PASSWORD`, `PASSENGER_PASSWORD`, `ABAP_URL`, `ABAP_CLIENT`.
 - **Cockpit:** `ssh -L 4024:127.0.0.1:4024 root@<vps>`, then http://localhost:4024/cockpit/index.html.
 - **Live check:** `APP_URL=http://localhost:4024 node --env-file=<secrets> scripts/live-check.mjs`.
+- **Traffic scenario:** `ZCL_FR_GENERATE_DATA` also builds it on FRA–JFK, on the first day two weeks out or later on
+  which LH 0400, DL 0107 and LH 0404 all fly: 9 bookings on LH 0400 (travels 90000101–105 with 2, 2, 1, 2 and 2), and
+  DL 0107, LH 0404 and DE 2016 (if it flies that day) filled to leave 2, 3 and 0 free seats. It prints
+  `TRAFFIC_FLIGHT LH 0400 <date>`, or says there is no such day; **Reset demo** returns that flight and the app keeps it
+  for **Replay traffic incident**.
+- **Passenger route:** the Caddy site for the app has a `passenger` login next to `dispatcher` and an `@passenger`
+  route for `/passenger/*` and `/odata/v4/passenger/*`, proxied to `flight-rescue:4004`. `PASSENGER_PASSWORD` is the
+  password of the app's `passenger` user, and Caddy holds its hash. The roles keep the two users apart: the control
+  service and the agent need `Dispatcher`, `PassengerService` needs `Passenger`. Through the tunnel the phone page is
+  http://localhost:4024/passenger/index.html (login `passenger`).
+- **Live check, traffic:** `APP_URL=http://localhost:4024 node --env-file=<secrets> scripts/live-check.mjs traffic`
+  resets the demo, replays the incident, approves the offers as `dispatcher`, accepts the phone booking's offer as
+  `passenger` (`DISPATCHER_PASSWORD` and `PASSENGER_PASSWORD` come from the secrets file) and exits 0 only if that
+  booking ends up Rebooked on the offered flight.
 - **Limits:** a failed call from ABAP is recorded on the cancellation (`NotifyStatus F`), not retried; SQLite is in
   memory, so a container restart loses disruptions and plans. A production setup would put SAP Event Mesh between
   ABAP and the app and use real authentication.
@@ -165,3 +205,18 @@ The cockpit, on the same day and system: Reset demo seeded the scenario for LH 0
 `ZCL_FR_CANCEL_FLIGHT` cancelled UA 0043 and the disruption appeared in the cockpit without a click. One approval of
 six moves took 12.8 s; in another run the app stalled for about a minute during an approval. The likely cause, since
 fixed: the app has a single SQLite connection, and an incoming event held it while reading the flight from ABAP.
+
+**Verified on 2026-10-08** on the VPS (A4H trial, release 816) with `claude-opus-5-5`: `live-check.mjs traffic` exited 0.
+The plan waited for approval 27 s after the replay started, with LH 0400 → LH 0404 at 17:15 offered to the phone
+booking; after Send offers and the scripted Accept, the booking was Rebooked after 33 s, and ABAP had 90000102/0001 on
+LH 0404 on 2026-10-22, the scenario's day. The seat board read LH 0400 at risk 3, DL 0107 held 2, LH 0404 moved 1 and
+held 1. The cancellation check still passed (LH 0402 cancelled, plan waiting after 21 s). The traffic check passed again
+after the disruption's delay became the measured drive-time delay (+8 min, not the report's +5) and again after the
+Traffic panel was added (plan after 25 s, Rebooked after 30 s and 31 s). On the VPS, Pause held the replay, each Step
+advanced one sample time and Resume played on. Rehearsed with a phone the same day: Reset demo, Replay traffic
+incident, Send offers in the cockpit, then Accept on `/passenger/index.html` behind the Basic-auth prompt. It worked.
+
+Not exercised: a jam whose offers span two affected flights (only LH 0400 has passenger context, and the impact note
+would count a later flight shared by both twice), a jam that crosses midnight (the window only looks at `jamDate`), and
+rejecting a jam's offers. Against ABAP only the accepted offer ran; a refused Accept and a closed jam are in
+`test/passenger.test.mjs`, against the mock. Not built: live traffic polling, and any airport other than FRA.
