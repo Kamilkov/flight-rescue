@@ -138,5 +138,6 @@ describe('the shipped incident', () => {
     assert.equal(hit.origin, shipped.approach)
     assert.match(shipped.label, shipped.simulated ? /^Simulated jam/ : /^Replay of a jam recorded on \d{4}-\d{2}-\d{2}/)
     assert.deepEqual([...new Set(shipped.samples.map(s => s.origin))].sort(), ['badhomburg', 'darmstadt', 'offenbach', 'wiesbaden'])
+    assert.ok(shipped.reports.every(r => !/ \| |->/.test(`${r.location} ${r.direction}`)), 'the Autobahn text is cleaned: no "<road> | " and no "->"')
   })
 })

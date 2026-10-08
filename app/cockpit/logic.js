@@ -165,7 +165,7 @@ sap.ui.define([], () => {
     if (!r?.clock) return { running: !!r?.running, clock: '' }
     const report = r.reports?.at(-1), point = p => `${p[0]};${p[1]};0`
     const coordinates = r.geo?.geometry ? JSON.parse(r.geo.geometry)?.coordinates ?? [] : [], route = coordinates.length > 1
-    // With a route, the frame is centred on the middle of the box around FRA and the jam line, so both are in view.
+    // With a route, the frame is centred on the middle of the box around FRA and the jam line, so both fit at the fixed zoom while the box is smaller than the frame.
     const mid = k => { const v = [FRA[k], ...coordinates.map(c => c[k])]; return Math.round((Math.min(...v) + Math.max(...v)) / 2 * 1e5) / 1e5 }
     const what = report && (report.delayMin != null ? `+${report.delayMin} min` : String(report.trafficType ?? '').toLowerCase().replace(/_/g, ' '))
     return {
