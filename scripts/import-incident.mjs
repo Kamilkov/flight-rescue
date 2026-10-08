@@ -1,14 +1,14 @@
-// Builds srv/traffic/data/incident.json, the traffic replay's data, from the airport-traffic spike's results.
-//   node scripts/import-incident.mjs <results dir>              a real incident: replay-incident.csv, replay-jams.csv, fra_jam_geo.csv
-//   node scripts/import-incident.mjs <results dir> --simulate   no usable incident: a labelled simulated jam over a recorded calm morning
+// Builds srv/traffic/data/incident.json, the traffic replay's data: simulated drive times modelled on the jam the
+// airport-traffic spike measured with Google Routes on 2026-10-06, and that spike's real Autobahn reports and map.
+// Google's terms forbid republishing Routes results, so no measured drive time goes in; only the Autobahn data is read.
+//   node scripts/import-incident.mjs <results dir>      reads replay-jams.csv and fra_jam_geo.csv
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const args = process.argv.slice(2), simulate = args.includes('--simulate')
-const dir = args.find(a => !a.startsWith('--'))
-if (!dir) { console.error('Usage: node scripts/import-incident.mjs <results dir> [--simulate]'); process.exit(2) }
+const dir = process.argv[2]
+if (!dir) { console.error('Usage: node scripts/import-incident.mjs <results dir>'); process.exit(2) }
 const ROADS = { wiesbaden: ['A66', 'A3'], badhomburg: ['A5'], offenbach: ['A3'], darmstadt: ['A5', 'A67'] }
 
 // The spike's CSVs come from Python's csv module: commas, and quotes doubled inside quoted fields (geometry is JSON).
@@ -38,36 +38,26 @@ const geoOf = id => {
 }
 const strongest = (reports, roads) => reports.filter(r => roads.includes(r.road)).sort((a, b) => (b.delayMin ?? 0) - (a.delayMin ?? 0))[0]
 
-let incident
-if (!simulate) {
-  const samples = read('replay-incident.csv').filter(r => r.airport === 'FRA')
-    .map(r => ({ ts: r.ts_utc, origin: r.origin, live: Number(r.live_s), typical: Number(r.typical_s) }))
-  if (!samples.length) throw new Error(`No FRA rows in ${join(dir, 'replay-incident.csv')}; run with --simulate.`)
-  const worst = samples.reduce((a, s) => (s.live - s.typical > a.live - a.typical ? s : a))
-  const reports = existsSync(join(dir, 'replay-jams.csv')) ? read('replay-jams.csv').map(report) : []
-  const day = berlin(worst.ts)
-  incident = { recordedOn: day, airport: 'FRA', approach: worst.origin, simulated: false,
-    label: `Replay of a jam recorded on ${day} · passenger context simulated`,
-    samples, reports: reports.map(({ id, ...r }) => r), geo: geoOf(strongest(reports, ROADS[worst.origin] ?? [])?.id) }
-} else {
-  // A calm weekday morning from the recording, 07:00 Frankfurt time on, with a jam added on the Bad Homburg approach, the one the passenger context drives.
-  const RAMP = [0, 0, 0, 3, 8, 14, 22, 25, 25, 24, 18, 10, 4] // minutes over typical, one per 10-min sample
-  const log = read('log.csv').filter(r => r.airport === 'FRA')
-  const times = [...new Set(log.map(r => r.ts_utc))].sort()
-  const start = times.findIndex(ts => ['Tue', 'Wed', 'Thu'].includes(berlin(ts, { weekday: 'short' })) && berlin(ts, { hour: '2-digit', hourCycle: 'h23' }) === '07')
-  if (start < 0 || start + RAMP.length > times.length) throw new Error('No weekday morning from 07:00 in log.csv.')
-  const window = times.slice(start, start + RAMP.length)
-  const samples = log.filter(r => window.includes(r.ts_utc)).map(r => ({
-    ts: r.ts_utc, origin: r.origin, live: Number(r.live_s) + (r.origin === 'badhomburg' ? RAMP[window.indexOf(r.ts_utc)] * 60 : 0), typical: Number(r.typical_s)
-  }))
-  const reports = window.flatMap((ts, k) => RAMP[k] >= 8
-    ? [{ ts, road: 'A5', location: 'near Frankfurt Airport (simulated)', direction: 'Darmstadt', delayMin: RAMP[k], trafficType: 'QUEUING_TRAFFIC' }] : [])
-  // The map shows the strongest jam the spike recorded near FRA, when there was one; the label says it is simulated.
-  const real = existsSync(join(dir, 'fra_jams.csv')) ? strongest(read('fra_jams.csv').map(report), ['A3', 'A5', 'A66', 'A67', 'A661']) : null
-  const day = berlin(window[0])
-  incident = { recordedOn: day, airport: 'FRA', approach: 'badhomburg', simulated: true,
-    label: `Simulated jam on the A5, over traffic recorded on ${day} · passenger context simulated`, samples, reports, geo: geoOf(real?.id) }
+// Minutes over typical, one sample every 10 min from 15:10 CEST. Bad Homburg jams from 16:10; the rule (6 min, 2 runs)
+// fires at 16:20, the run of the first Autobahn report. The other approaches stay within ±3 min.
+const APPROACH = 'badhomburg', FIRE = 7, STEP_MS = 600000
+const SHAPE = {
+  wiesbaden: { typical: 30, over: [0, 1, 1, 2, 2, 3, 2, 2, 1, 2, 3, 2, 1, 1, 0, 0] },
+  badhomburg: { typical: 30, over: [0, 1, 0, 1, 0, 1, 7, 8, 9, 10, 5, 4, 3, 2, 1, 1] },
+  offenbach: { typical: 15, over: [0, 0, 1, 1, 2, 2, 3, 2, 2, 1, 1, 2, 1, 0, 0, -1] },
+  darmstadt: { typical: 20, over: [0, -1, 0, 1, 1, 1, 3, 3, 3, 1, 1, 1, 0, 0, -1, -1] }
 }
+const reports = read('replay-jams.csv').map(report).sort((a, b) => a.ts.localeCompare(b.ts))
+const first = reports.find(r => ROADS[APPROACH].includes(r.road))
+if (!first) throw new Error(`No report on ${ROADS[APPROACH]} in ${join(dir, 'replay-jams.csv')}.`)
+// Same format as the reports' times, so that a sample at a report's time sees it (srv/lib/traffic.js compares strings).
+const at = k => new Date(Date.parse(first.ts) + (k - FIRE) * STEP_MS).toISOString().slice(0, 19) + '+00:00'
+const samples = SHAPE[APPROACH].over.flatMap((_, k) => Object.entries(SHAPE).map(([origin, { typical, over }]) =>
+  ({ ts: at(k), origin, live: (typical + over[k]) * 60, typical: typical * 60 })))
+const day = berlin(first.ts)
+const incident = { recordedOn: day, airport: 'FRA', approach: APPROACH, simulated: true,
+  label: `Simulated drive times modelled on a jam measured on ${day} · Autobahn reports real · passenger context simulated`,
+  samples, reports: reports.map(({ id, ...r }) => r), geo: geoOf(strongest(reports, ROADS[APPROACH])?.id) }
 mkdirSync(join(root, 'srv/traffic/data'), { recursive: true })
 writeFileSync(join(root, 'srv/traffic/data/incident.json'), JSON.stringify(incident, null, 1) + '\n')
 console.log(`incident.json: ${incident.label}; ${incident.samples.length} samples, ${incident.reports.length} reports, map ${incident.geo ? 'yes' : 'no'}`)

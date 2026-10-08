@@ -24,7 +24,7 @@ service ControlService {
   /** For re-recording: reseeds the ABAP demo data (not the mock's) and deletes all disruptions and plans. */
   action resetDemo() returns fr.DemoInfo;
 
-  /** Replay the recorded traffic incident on the demo clock. When the rule fires, a TrafficJam disruption opens and the agent starts. */
+  /** Replay the traffic incident on the demo clock. When the rule fires, a TrafficJam disruption opens and the agent starts. */
   action replayTraffic() returns fr.TrafficReplay;
   /** The replay so far: the demo clock, the samples and reports played, and where the rule fired. Changes nothing. */
   function trafficReplay() returns fr.TrafficReplay;

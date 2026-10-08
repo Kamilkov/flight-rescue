@@ -2,386 +2,392 @@
  "recordedOn": "2026-10-06",
  "airport": "FRA",
  "approach": "badhomburg",
- "simulated": false,
- "label": "Replay of a jam recorded on 2026-10-06 · passenger context simulated",
+ "simulated": true,
+ "label": "Simulated drive times modelled on a jam measured on 2026-10-06 · Autobahn reports real · passenger context simulated",
  "samples": [
   {
-   "ts": "2026-10-06T13:10:01+00:00",
+   "ts": "2026-10-06T13:10:02+00:00",
    "origin": "wiesbaden",
-   "live": 1585,
-   "typical": 1603
+   "live": 1800,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T13:10:01+00:00",
+   "ts": "2026-10-06T13:10:02+00:00",
    "origin": "badhomburg",
-   "live": 1294,
-   "typical": 1286
+   "live": 1800,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T13:10:01+00:00",
+   "ts": "2026-10-06T13:10:02+00:00",
    "origin": "offenbach",
-   "live": 1626,
-   "typical": 1571
+   "live": 900,
+   "typical": 900
   },
   {
-   "ts": "2026-10-06T13:10:01+00:00",
+   "ts": "2026-10-06T13:10:02+00:00",
    "origin": "darmstadt",
-   "live": 1393,
-   "typical": 1498
+   "live": 1200,
+   "typical": 1200
   },
   {
    "ts": "2026-10-06T13:20:02+00:00",
    "origin": "wiesbaden",
-   "live": 1603,
-   "typical": 1614
+   "live": 1860,
+   "typical": 1800
   },
   {
    "ts": "2026-10-06T13:20:02+00:00",
    "origin": "badhomburg",
-   "live": 1308,
-   "typical": 1288
+   "live": 1860,
+   "typical": 1800
   },
   {
    "ts": "2026-10-06T13:20:02+00:00",
    "origin": "offenbach",
-   "live": 1645,
-   "typical": 1568
+   "live": 900,
+   "typical": 900
   },
   {
    "ts": "2026-10-06T13:20:02+00:00",
    "origin": "darmstadt",
-   "live": 1403,
-   "typical": 1477
+   "live": 1140,
+   "typical": 1200
   },
   {
-   "ts": "2026-10-06T13:30:01+00:00",
+   "ts": "2026-10-06T13:30:02+00:00",
    "origin": "wiesbaden",
-   "live": 1588,
-   "typical": 1662
+   "live": 1860,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T13:30:01+00:00",
+   "ts": "2026-10-06T13:30:02+00:00",
    "origin": "badhomburg",
-   "live": 1279,
-   "typical": 1292
+   "live": 1800,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T13:30:01+00:00",
+   "ts": "2026-10-06T13:30:02+00:00",
    "origin": "offenbach",
-   "live": 1607,
-   "typical": 1603
+   "live": 960,
+   "typical": 900
   },
   {
-   "ts": "2026-10-06T13:30:01+00:00",
+   "ts": "2026-10-06T13:30:02+00:00",
    "origin": "darmstadt",
-   "live": 1384,
-   "typical": 1507
+   "live": 1200,
+   "typical": 1200
   },
   {
-   "ts": "2026-10-06T13:40:01+00:00",
+   "ts": "2026-10-06T13:40:02+00:00",
    "origin": "wiesbaden",
-   "live": 1594,
-   "typical": 1649
+   "live": 1920,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T13:40:01+00:00",
+   "ts": "2026-10-06T13:40:02+00:00",
    "origin": "badhomburg",
-   "live": 1286,
-   "typical": 1319
+   "live": 1860,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T13:40:01+00:00",
+   "ts": "2026-10-06T13:40:02+00:00",
    "origin": "offenbach",
-   "live": 1569,
-   "typical": 1614
+   "live": 960,
+   "typical": 900
   },
   {
-   "ts": "2026-10-06T13:40:01+00:00",
+   "ts": "2026-10-06T13:40:02+00:00",
    "origin": "darmstadt",
-   "live": 1360,
-   "typical": 1515
+   "live": 1260,
+   "typical": 1200
   },
   {
-   "ts": "2026-10-06T13:50:01+00:00",
+   "ts": "2026-10-06T13:50:02+00:00",
    "origin": "wiesbaden",
-   "live": 1642,
-   "typical": 1659
+   "live": 1920,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T13:50:01+00:00",
+   "ts": "2026-10-06T13:50:02+00:00",
    "origin": "badhomburg",
-   "live": 1346,
-   "typical": 1320
+   "live": 1800,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T13:50:01+00:00",
+   "ts": "2026-10-06T13:50:02+00:00",
    "origin": "offenbach",
-   "live": 1608,
-   "typical": 1618
+   "live": 1020,
+   "typical": 900
   },
   {
-   "ts": "2026-10-06T13:50:01+00:00",
+   "ts": "2026-10-06T13:50:02+00:00",
    "origin": "darmstadt",
-   "live": 1439,
-   "typical": 1517
+   "live": 1260,
+   "typical": 1200
   },
   {
    "ts": "2026-10-06T14:00:02+00:00",
    "origin": "wiesbaden",
-   "live": 1639,
-   "typical": 1648
+   "live": 1980,
+   "typical": 1800
   },
   {
    "ts": "2026-10-06T14:00:02+00:00",
    "origin": "badhomburg",
-   "live": 1344,
-   "typical": 1321
+   "live": 1860,
+   "typical": 1800
   },
   {
    "ts": "2026-10-06T14:00:02+00:00",
    "origin": "offenbach",
-   "live": 1620,
-   "typical": 1614
+   "live": 1020,
+   "typical": 900
   },
   {
    "ts": "2026-10-06T14:00:02+00:00",
    "origin": "darmstadt",
-   "live": 1431,
-   "typical": 1503
+   "live": 1260,
+   "typical": 1200
   },
   {
-   "ts": "2026-10-06T14:10:01+00:00",
+   "ts": "2026-10-06T14:10:02+00:00",
    "origin": "wiesbaden",
-   "live": 1704,
-   "typical": 1656
+   "live": 1920,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T14:10:01+00:00",
+   "ts": "2026-10-06T14:10:02+00:00",
    "origin": "badhomburg",
-   "live": 1688,
-   "typical": 1320
+   "live": 2220,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T14:10:01+00:00",
+   "ts": "2026-10-06T14:10:02+00:00",
    "origin": "offenbach",
-   "live": 1689,
-   "typical": 1628
+   "live": 1080,
+   "typical": 900
   },
   {
-   "ts": "2026-10-06T14:10:01+00:00",
+   "ts": "2026-10-06T14:10:02+00:00",
    "origin": "darmstadt",
-   "live": 1449,
-   "typical": 1501
+   "live": 1380,
+   "typical": 1200
   },
   {
    "ts": "2026-10-06T14:20:02+00:00",
    "origin": "wiesbaden",
-   "live": 1701,
-   "typical": 1657
+   "live": 1920,
+   "typical": 1800
   },
   {
    "ts": "2026-10-06T14:20:02+00:00",
    "origin": "badhomburg",
-   "live": 1823,
-   "typical": 1321
+   "live": 2280,
+   "typical": 1800
   },
   {
    "ts": "2026-10-06T14:20:02+00:00",
    "origin": "offenbach",
-   "live": 1660,
-   "typical": 1633
+   "live": 1020,
+   "typical": 900
   },
   {
    "ts": "2026-10-06T14:20:02+00:00",
    "origin": "darmstadt",
-   "live": 1455,
-   "typical": 1494
+   "live": 1380,
+   "typical": 1200
   },
   {
-   "ts": "2026-10-06T14:30:01+00:00",
+   "ts": "2026-10-06T14:30:02+00:00",
    "origin": "wiesbaden",
-   "live": 1696,
-   "typical": 1649
+   "live": 1860,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T14:30:01+00:00",
+   "ts": "2026-10-06T14:30:02+00:00",
    "origin": "badhomburg",
-   "live": 1843,
-   "typical": 1324
+   "live": 2340,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T14:30:01+00:00",
+   "ts": "2026-10-06T14:30:02+00:00",
    "origin": "offenbach",
-   "live": 1649,
-   "typical": 1634
+   "live": 1020,
+   "typical": 900
   },
   {
-   "ts": "2026-10-06T14:30:01+00:00",
+   "ts": "2026-10-06T14:30:02+00:00",
    "origin": "darmstadt",
-   "live": 1440,
-   "typical": 1490
+   "live": 1380,
+   "typical": 1200
   },
   {
-   "ts": "2026-10-06T14:40:01+00:00",
+   "ts": "2026-10-06T14:40:02+00:00",
    "origin": "wiesbaden",
-   "live": 1673,
-   "typical": 1644
+   "live": 1920,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T14:40:01+00:00",
+   "ts": "2026-10-06T14:40:02+00:00",
    "origin": "badhomburg",
-   "live": 1899,
-   "typical": 1323
+   "live": 2400,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T14:40:01+00:00",
+   "ts": "2026-10-06T14:40:02+00:00",
    "origin": "offenbach",
-   "live": 1690,
-   "typical": 1634
+   "live": 960,
+   "typical": 900
   },
   {
-   "ts": "2026-10-06T14:40:01+00:00",
+   "ts": "2026-10-06T14:40:02+00:00",
    "origin": "darmstadt",
-   "live": 1421,
-   "typical": 1494
+   "live": 1260,
+   "typical": 1200
   },
   {
-   "ts": "2026-10-06T14:50:01+00:00",
+   "ts": "2026-10-06T14:50:02+00:00",
    "origin": "wiesbaden",
-   "live": 1658,
-   "typical": 1635
+   "live": 1980,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T14:50:01+00:00",
+   "ts": "2026-10-06T14:50:02+00:00",
    "origin": "badhomburg",
-   "live": 1388,
-   "typical": 1319
+   "live": 2100,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T14:50:01+00:00",
+   "ts": "2026-10-06T14:50:02+00:00",
    "origin": "offenbach",
-   "live": 1613,
-   "typical": 1613
+   "live": 960,
+   "typical": 900
   },
   {
-   "ts": "2026-10-06T14:50:01+00:00",
+   "ts": "2026-10-06T14:50:02+00:00",
    "origin": "darmstadt",
-   "live": 1400,
-   "typical": 1490
+   "live": 1260,
+   "typical": 1200
   },
   {
-   "ts": "2026-10-06T15:00:01+00:00",
+   "ts": "2026-10-06T15:00:02+00:00",
    "origin": "wiesbaden",
-   "live": 1775,
-   "typical": 1648
+   "live": 1920,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T15:00:01+00:00",
+   "ts": "2026-10-06T15:00:02+00:00",
    "origin": "badhomburg",
-   "live": 1454,
-   "typical": 1329
+   "live": 2040,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T15:00:01+00:00",
+   "ts": "2026-10-06T15:00:02+00:00",
    "origin": "offenbach",
-   "live": 1688,
-   "typical": 1592
+   "live": 1020,
+   "typical": 900
   },
   {
-   "ts": "2026-10-06T15:10:01+00:00",
-   "origin": "wiesbaden",
-   "live": 1759,
-   "typical": 1647
-  },
-  {
-   "ts": "2026-10-06T15:10:01+00:00",
-   "origin": "badhomburg",
-   "live": 1606,
-   "typical": 1336
-  },
-  {
-   "ts": "2026-10-06T15:10:01+00:00",
-   "origin": "offenbach",
-   "live": 1708,
-   "typical": 1589
-  },
-  {
-   "ts": "2026-10-06T15:10:01+00:00",
+   "ts": "2026-10-06T15:00:02+00:00",
    "origin": "darmstadt",
-   "live": 1479,
-   "typical": 1489
+   "live": 1260,
+   "typical": 1200
+  },
+  {
+   "ts": "2026-10-06T15:10:02+00:00",
+   "origin": "wiesbaden",
+   "live": 1860,
+   "typical": 1800
+  },
+  {
+   "ts": "2026-10-06T15:10:02+00:00",
+   "origin": "badhomburg",
+   "live": 1980,
+   "typical": 1800
+  },
+  {
+   "ts": "2026-10-06T15:10:02+00:00",
+   "origin": "offenbach",
+   "live": 960,
+   "typical": 900
+  },
+  {
+   "ts": "2026-10-06T15:10:02+00:00",
+   "origin": "darmstadt",
+   "live": 1200,
+   "typical": 1200
   },
   {
    "ts": "2026-10-06T15:20:02+00:00",
    "origin": "wiesbaden",
-   "live": 1745,
-   "typical": 1660
+   "live": 1860,
+   "typical": 1800
   },
   {
    "ts": "2026-10-06T15:20:02+00:00",
    "origin": "badhomburg",
-   "live": 1600,
-   "typical": 1338
+   "live": 1920,
+   "typical": 1800
   },
   {
    "ts": "2026-10-06T15:20:02+00:00",
    "origin": "offenbach",
-   "live": 1699,
-   "typical": 1569
+   "live": 900,
+   "typical": 900
   },
   {
    "ts": "2026-10-06T15:20:02+00:00",
    "origin": "darmstadt",
-   "live": 1471,
-   "typical": 1473
+   "live": 1200,
+   "typical": 1200
   },
   {
    "ts": "2026-10-06T15:30:02+00:00",
    "origin": "wiesbaden",
-   "live": 1685,
-   "typical": 1666
+   "live": 1800,
+   "typical": 1800
   },
   {
    "ts": "2026-10-06T15:30:02+00:00",
    "origin": "badhomburg",
-   "live": 1508,
-   "typical": 1321
+   "live": 1860,
+   "typical": 1800
   },
   {
    "ts": "2026-10-06T15:30:02+00:00",
    "origin": "offenbach",
-   "live": 1687,
-   "typical": 1566
+   "live": 900,
+   "typical": 900
   },
   {
    "ts": "2026-10-06T15:30:02+00:00",
    "origin": "darmstadt",
-   "live": 1479,
-   "typical": 1464
+   "live": 1140,
+   "typical": 1200
   },
   {
-   "ts": "2026-10-06T15:40:01+00:00",
+   "ts": "2026-10-06T15:40:02+00:00",
    "origin": "wiesbaden",
-   "live": 1652,
-   "typical": 1647
+   "live": 1800,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T15:40:01+00:00",
+   "ts": "2026-10-06T15:40:02+00:00",
    "origin": "badhomburg",
-   "live": 1484,
-   "typical": 1317
+   "live": 1860,
+   "typical": 1800
   },
   {
-   "ts": "2026-10-06T15:40:01+00:00",
+   "ts": "2026-10-06T15:40:02+00:00",
    "origin": "offenbach",
-   "live": 1683,
-   "typical": 1567
+   "live": 840,
+   "typical": 900
   },
   {
-   "ts": "2026-10-06T15:40:01+00:00",
+   "ts": "2026-10-06T15:40:02+00:00",
    "origin": "darmstadt",
-   "live": 1502,
-   "typical": 1463
+   "live": 1140,
+   "typical": 1200
   }
  ],
  "reports": [

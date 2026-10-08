@@ -33,7 +33,7 @@ The agent has a second trigger, no cancellation needed: a traffic jam on the way
 | `scripts/live-check.mjs` | Cancels the demo flight on the deployed app and waits for ABAP's event and the agent; `traffic` replays the jam and accepts the offer |
 | `Dockerfile` | The container that runs next to the ABAP trial on the VPS |
 | `srv/lib/` | `abap.js` (the only module that calls ABAP), `rebook.js` (impact, propose, apply, send offers, accept) and `traffic.js` (the replay and its rule) |
-| `srv/traffic/data/incident.json`, `scripts/import-incident.mjs` | The recorded jam the replay plays, and the script that builds it |
+| `srv/traffic/data/incident.json`, `scripts/import-incident.mjs` | The simulated jam the replay plays, and the script that builds it |
 | `srv/passenger/`, `app/passenger/` | The passenger's phone: their offer after a traffic jam, and Accept (an OData service and a plain HTML page) |
 | `app/cockpit/` | The dispatcher's page (SAPUI5, no build step): cancel a flight, follow the agent, approve, watch the seats |
 | `db/schema.cds` | What this app owns: disruptions, plans, plan items and the simulated passenger context |
@@ -124,8 +124,8 @@ Things to check against your published binding:
 
 The agent's second trigger. No flight is cancelled: a jam on the way to the airport puts passengers at risk of missing theirs, and each gets an offer for a later flight. Nobody moves unless they accept.
 
-1. **Replay:** **Replay traffic incident** plays a recorded jam onto the scenario flight's morning, one sample every 2 s: the A5 towards Darmstadt on Tue 2026-10-06, about 16:10–16:40 CEST. A sample is the drive time to Terminal 1 from one of four approaches, live and typical (Google Routes); Autobahn jam reports come with it.
-2. **Rule:** an approach at least 6 min over typical for 2 samples in a row (`RULE` in `srv/lib/traffic.js`). Bad Homburg runs +6.1, then +8.4 min over typical, so it fires on the second sample, while the Autobahn report still says 5 min.
+1. **Replay:** **Replay traffic incident** plays a jam onto the scenario flight's morning, one sample every 2 s: the A5 towards Darmstadt on Tue 2026-10-06, about 16:10–16:40 CEST. A sample is the drive time to Terminal 1 from one of four approaches, live and typical; Autobahn jam reports come with it. The drive times were measured with Google Routes in a 48 h test. The replay is a labelled simulation modelled on that measurement, because Google's terms forbid republishing the real numbers. The Autobahn reports are real.
+2. **Rule:** an approach at least 6 min over typical for 2 samples in a row (`RULE` in `srv/lib/traffic.js`). Bad Homburg runs +7, then +8 min over typical, so it fires on the second sample, while the Autobahn report still says 5 min.
 3. **Disruption:** the server opens a `TrafficJam` disruption and starts the agent as the dispatcher, as ABAP's event does for a cancellation. Its `delayMinutes` is the drive-time delay the rule measured (+8).
 4. **Offers:** the agent proposes a later flight for each booking at risk and calls `sendOffers`; the dispatcher presses **Send offers**.
 5. **Accept:** `/passenger/index.html` shows the passenger their offer; **Accept** has ABAP move that one booking.
@@ -134,9 +134,9 @@ While a replay exists (until **Reset demo**), a Traffic panel fills the bottom h
 
 **Running it.** Against the mock: `npm run watch`, **Replay traffic incident**, **Send offers** when the plan appears, then http://localhost:4004/passenger/index.html as `passenger` (empty password) in a private window or another browser: the browser reuses the dispatcher's login for the address, and the passenger service refuses it (403); restart the app between runs. Against ABAP, press **Reset demo** first and after every restart: the app learns the scenario's flight from it (refused with `NO_SCENARIO` without).
 
-**The scenario** is LH 0400 FRA–JFK with 9 scenario bookings (travels 90000101–105); in the mock it flies on 2026-10-20 with DL 0107 and LH 0404 later that day. In ABAP, `ZCL_FR_GENERATE_DATA` picks the day ([below](#the-abap-event-and-the-vps)), and the flight may also carry bookings copied from /DMO/, which have no passenger context and are not contacted. The recording, `srv/traffic/data/incident.json`, comes from a separate 48 h probe (not in this repo) through `scripts/import-incident.mjs <results dir>`; `--simulate` makes a labelled simulated jam instead.
+**The scenario** is LH 0400 FRA–JFK with 9 scenario bookings (travels 90000101–105); in the mock it flies on 2026-10-20 with DL 0107 and LH 0404 later that day. In ABAP, `ZCL_FR_GENERATE_DATA` picks the day ([below](#the-abap-event-and-the-vps)), and the flight may also carry bookings copied from /DMO/, which have no passenger context and are not contacted. The replay's data, `srv/traffic/data/incident.json`, comes from `scripts/import-incident.mjs <results dir>`: its drive times are a fixed shape in the script, and it reads only the Autobahn reports and the map from the separate 48 h probe (not in this repo).
 
-**What is simulated.** The jam is real. The passenger context is not (`db/data/fr-PassengerContext.csv`): of the 9 scenario bookings, 4 drive via Bad Homburg, 1 via Darmstadt, 2 take the train and 2 have checked in, and the `passenger` user stands for 90000102/0001. Nor is the demo clock (FRA local time): the recording is shifted so that the rule fires 2 h before the flight leaves (`LEAD_MIN`). The cockpit's label says the passenger context is simulated, and the phone page says it stands for the airline's app.
+**What is simulated.** The jam is real, its drive times are not (see 1.). Nor is the passenger context (`db/data/fr-PassengerContext.csv`): of the 9 scenario bookings, 4 drive via Bad Homburg, 1 via Darmstadt, 2 take the train and 2 have checked in, and the `passenger` user stands for 90000102/0001. Nor is the demo clock (FRA local time): the replay is shifted so that the rule fires 2 h before the flight leaves (`LEAD_MIN`). The cockpit's label says what is simulated, and the phone page says it stands for the airline's app.
 
 ## Design choices
 

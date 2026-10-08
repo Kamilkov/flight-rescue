@@ -287,7 +287,7 @@ describe('pausing and stepping', () => {
 })
 
 describe('the shipped incident', () => {
-  test('the rule fires on it, on the label\'s approach, and it has a label and samples for every approach', () => {
+  test('it is a labelled simulation; the rule fires on it, on its approach, and it has samples for every approach', () => {
     const shipped = JSON.parse(require('node:fs').readFileSync(join(root, 'srv/traffic/data/incident.json'), 'utf8'))
     const hit = traffic.fires(shipped.samples)
     assert.ok(hit, 'the rule fires')
@@ -296,7 +296,11 @@ describe('the shipped incident', () => {
     const [head, ...rows] = require('node:fs').readFileSync(join(root, 'db/data/fr-PassengerContext.csv'), 'utf8').trim().split('\n').map(l => l.split(';'))
     const phone = rows.map(r => Object.fromEntries(head.map((h, k) => [h, r[k].trim()]))).find(r => r.phone === 'true')
     assert.equal(traffic.fires(shipped.samples, traffic.RULE).origin, phone.approach, 'the incident fires on the phone booking\'s approach')
-    assert.match(shipped.label, shipped.simulated ? /^Simulated jam/ : /^Replay of a jam recorded on \d{4}-\d{2}-\d{2}/)
+    // Google's terms forbid republishing Routes results: the drive times are simulated, and only the jammed approach reaches the rule.
+    assert.equal(shipped.simulated, true)
+    assert.match(shipped.label, /^Simulated drive times modelled on a jam measured on \d{4}-\d{2}-\d{2} · Autobahn reports real/)
+    assert.equal(hit.delayMin, 8, 'the disruption says +8 min')
+    assert.ok(shipped.samples.every(s => s.origin === shipped.approach || s.live - s.typical < 6 * 60), 'no other approach reaches 6 min')
     assert.deepEqual([...new Set(shipped.samples.map(s => s.origin))].sort(), ['badhomburg', 'darmstadt', 'offenbach', 'wiesbaden'])
     assert.ok(shipped.reports.every(r => !/ \| |->/.test(`${r.location} ${r.direction}`)), 'the Autobahn text is cleaned: no "<road> | " and no "->"')
   })
