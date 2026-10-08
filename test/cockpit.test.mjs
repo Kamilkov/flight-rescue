@@ -344,13 +344,47 @@ describe('cockpit logic', () => {
       [{ label: 'LH 0404 · 20 Oct', count: 3, rebooked: 1, waiting: 2, failed: [] }])
   })
 
-  test('the jam chart: drive time above typical per approach, the threshold, where the rule fired', () => {
-    const replay = { steps: 3, rule: { minDelayMin: 10, runs: 2 }, samples: [
-      { clock: '2026-10-20T08:00:00', origin: 'wiesbaden', live: 600, typical: 600 },
-      { clock: '2026-10-20T08:10:00', origin: 'wiesbaden', live: 1800, typical: 600 }],
-      fired: { clock: '2026-10-20T08:10:00', origin: 'wiesbaden', delayMin: 20 } }
-    assert.deepEqual(logic.chart(replay), { width: 300, height: 110, threshold: 64, lines: [{ origin: 'wiesbaden', points: '0,110 150,18' }], fired: 150 })
+  test('the jam chart: axes in round steps, the threshold, the hot approach, where the rule fired', () => {
+    const sample = (clock, origin, over) => ({ clock: `2026-10-20T${clock}:00`, origin, live: 600 + over * 60, typical: 600 })
+    const replay = { steps: 4, rule: { minDelayMin: 6, runs: 2 }, samples: [
+      sample('08:00', 'wiesbaden', 0), sample('08:00', 'badhomburg', 2),
+      sample('08:10', 'wiesbaden', 1), sample('08:10', 'badhomburg', 7),
+      sample('08:20', 'wiesbaden', 0.5), sample('08:20', 'badhomburg', 9)],
+      fired: { clock: '2026-10-20T08:20:00', origin: 'badhomburg', delayMin: 9 } }
+    assert.deepEqual(logic.chart(replay), {
+      width: 498, height: 180, plot: { left: 32, right: 486, top: 18, bottom: 156 }, zero: 156,
+      yTicks: [{ y: 156, label: '0', rule: false }, { y: 128.4, label: '2', rule: false }, { y: 100.8, label: '4', rule: false },
+        { y: 73.2, label: '6', rule: true }, { y: 45.6, label: '8', rule: false }, { y: 18, label: '10', rule: false }],
+      xTicks: [{ x: 32, label: '08:00' }, { x: 486, label: '08:30' }],
+      threshold: { y: 73.2, label: 'Rule · 6 min for 2 samples' },
+      lines: [
+        { origin: 'wiesbaden', name: 'Wiesbaden', color: 0, hot: false, dim: true, value: '+0.5', points: '32,156 183.3,142.2 334.7,149.1' },
+        { origin: 'badhomburg', name: 'Bad Homburg', color: 1, hot: true, dim: false, value: '+9.0', points: '32,128.4 183.3,59.4 334.7,31.8' }],
+      area: '32,128.4 183.3,59.4 334.7,31.8 334.7,156 32,156',
+      fired: { x: 334.7, y: 31.8, pill: 334.7, label: 'Fired 08:20', color: 1 },
+      peak: null, // the peak is the firing sample: its dot marks it
+      now: 334.7 })
     assert.equal(logic.chart({ samples: [] }), null)
+  })
+
+  test('the jam chart before the rule fires: nobody hot, nobody faded; below zero the axis goes negative', () => {
+    const c = logic.chart({ steps: 3, rule: { minDelayMin: 6, runs: 2 }, samples: [
+      { clock: '2026-10-20T08:00:00', origin: 'darmstadt', live: 480, typical: 600 }] })
+    assert.deepEqual(c.lines.map(l => [l.hot, l.dim, l.value]), [[false, false, '−2.0']])
+    assert.deepEqual([c.yTicks[0].label, c.area, c.fired, c.xTicks], ['−2', null, null, []], 'one sample: no interval yet, no time ticks')
+  })
+
+  test('the chart\'s SVG escapes its text and writes only numbers as coordinates', () => {
+    const c = logic.chart({ steps: 2, rule: { minDelayMin: 6, runs: 2 }, samples: [
+      { clock: '2026-10-20T08:00:00', origin: 'badhomburg', live: 1200, typical: 600 },
+      { clock: '2026-10-20T08:10:00', origin: 'badhomburg', live: 1260, typical: 600 }],
+      fired: { clock: '2026-10-20T08:10:00', origin: 'badhomburg', delayMin: 11 } })
+    const svg = logic.chartSvg(c)
+    assert.match(svg, /<polyline class="frChartLine frChartC0 frChartHot" points="[0-9., ]+"\/>/)
+    assert.match(svg, />Fired 08:10</)
+    assert.match(svg, />Rule · 6 min for 2 samples</)
+    const hostile = logic.chartSvg({ ...c, threshold: { ...c.threshold, label: '<img src=x onerror=alert(1)>' }, lines: c.lines.map(l => ({ ...l, color: '0"><script>', points: '1,2"/><script>' })) })
+    assert.doesNotMatch(hostile, /<img|<script/)
   })
 
   test('the jam card: clock, report, rule note and map', () => {
@@ -359,7 +393,8 @@ describe('cockpit logic', () => {
       reports: [{ clock: '2026-10-20T08:00:00', road: 'A3', location: 'Mönchhof - Frankfurter Kreuz', direction: 'Würzburg', delayMin: 25, trafficType: 'QUEUING_TRAFFIC' }],
       fired: { clock: '2026-10-20T08:10:00', origin: 'wiesbaden', delayMin: 15 },
       geo: { geometry: '{"type":"LineString","coordinates":[[8.47,50.048],[8.55,50.058]]}' } })
-    assert.deepEqual([v.running, v.paused, v.clockText, v.report, v.note], [true, false, 'Tue 20 Oct · 08:10', 'A3 Mönchhof - Frankfurter Kreuz → Würzburg: +25 min', 'Rule fired at 08:10: wiesbaden +15 min over typical'])
+    assert.deepEqual([v.running, v.paused, v.clockText, v.report, v.note], [true, false, 'Tue 20 Oct · 08:10',
+      { road: 'A3', place: 'Mönchhof - Frankfurter Kreuz → Würzburg', what: '+25 min' }, 'Rule fired at 08:10: Wiesbaden +15 min over typical'])
     assert.deepEqual(v.map.routes, [{ position: '8.47;50.048;0;8.55;50.058;0' }])
     assert.equal(v.map.center, '8.5161;50.04795', 'the middle of the box around FRA and the jam line')
     assert.deepEqual(v.map.spots, [{ position: '8.5622;50.0379;0', label: 'FRA', type: 'Default' }])

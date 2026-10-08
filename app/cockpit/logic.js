@@ -157,20 +157,82 @@ sap.ui.define([], () => {
   // What the Traffic panel's GeoMap needs before there is a replay to show: it throws on an undefined configuration or zoom level.
   const BASE_MAP = { config: OSM, center: `${FRA[0]};${FRA[1]}`, zoom: 12 }
 
-  /** The Traffic panel's chart: drive time above typical (min) per approach as SVG coordinates. x spans the whole replay
-   *  (`steps` sample times), so the lines grow left to right; y runs from 0 to above the rule's threshold. */
-  function chart(r, width = 300, height = 110) {
+  // The approaches' display names; the others are their id capitalised.
+  const PLACES = { badhomburg: 'Bad Homburg' }
+  const place = o => PLACES[o] ?? `${o.charAt(0).toUpperCase()}${o.slice(1)}`
+  const r1 = v => Math.round(v * 10) / 10
+  const signed = v => `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(1)}`
+  const hhmm = m => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+  const minutes = c => Date.parse(`${c}Z`) / 60000
+
+  /** The Traffic panel's chart: drive time above typical (min) per approach, in a fixed 498×180 viewBox that the page
+   *  scales without stretching. x spans the whole replay (`steps` sample times), so the lines grow left to right and the
+   *  rest is shaded until the last sample; y runs in round steps from below 0 to above the rule's threshold. Once the rule
+   *  has fired, its approach is drawn heavier (`hot`) and the others fade. */
+  function chart(r) {
     const samples = r?.samples ?? [], clocks = [...new Set(samples.map(s => s.clock))].sort()
     if (!clocks.length) return null
-    const over = s => (s.live - s.typical) / 60, limit = r.rule?.minDelayMin ?? 10
-    const top = Math.max(limit, ...samples.map(over)) * 1.2, bottom = Math.min(0, ...samples.map(over))
-    const steps = Math.max(r.steps ?? clocks.length, 2)
-    const x = i => Math.round(i / (steps - 1) * width), y = v => Math.round((top - v) / (top - bottom) * height)
-    const lines = [...new Set(samples.map(s => s.origin))].map(origin => ({
-      origin,
-      points: clocks.flatMap((c, i) => samples.filter(s => s.clock === c && s.origin === origin).map(s => `${x(i)},${y(over(s))}`)).join(' ')
-    }))
-    return { width, height, threshold: y(limit), lines, fired: r.fired ? x(clocks.indexOf(r.fired.clock)) : null }
+    const width = 498, height = 180, plot = { left: 32, right: 486, top: 18, bottom: 156 }
+    const over = s => (s.live - s.typical) / 60, limit = r.rule?.minDelayMin ?? 10, values = samples.map(over)
+    const hi = Math.max(limit, ...values), lo = Math.min(0, ...values)
+    const step = [1, 2, 3, 5, 10, 15, 20, 30, 60].find(t => (hi - lo) / t <= 5) ?? 120
+    let top = Math.floor(hi / step) * step + step
+    if (top - hi < step / 2) top += step // room for the peak's label
+    const bottom = Math.min(0, Math.floor(lo / step) * step), steps = Math.max(r.steps ?? clocks.length, 2)
+    const y = v => r1(plot.top + (top - v) / (top - bottom) * (plot.bottom - plot.top))
+    const x = i => r1(plot.left + i / (steps - 1) * (plot.right - plot.left))
+    const yTicks = []
+    for (let v = bottom; v <= top; v += step) yTicks.push({ y: y(v), label: v < 0 ? `−${-v}` : String(v), rule: v === limit })
+    const xTicks = []
+    if (clocks.length > 1) { // the sample interval is known from the first two samples
+      const start = minutes(clocks[0]), span = (minutes(clocks[1]) - start) * (steps - 1), every = span <= 180 ? 30 : 60
+      for (let m = Math.ceil(start / every) * every; m <= start + span; m += every)
+        xTicks.push({ x: r1(plot.left + (m - start) / span * (plot.right - plot.left)), label: hhmm(m) })
+    }
+    const hot = r.fired?.origin, at = (origin, i) => samples.find(s => s.clock === clocks[i] && s.origin === origin)
+    const lines = [...new Set(samples.map(s => s.origin))].map((origin, k) => {
+      const own = clocks.flatMap((c, i) => { const s = at(origin, i); return s ? [[i, over(s)]] : [] })
+      return { origin, name: place(origin), color: k % 4, hot: origin === hot, dim: !!hot && origin !== hot,
+        value: signed(own.at(-1)[1]), own, points: own.map(([i, v]) => `${x(i)},${y(v)}`).join(' ') }
+    })
+    const hotLine = lines.find(l => l.hot), clamp = (v, m) => Math.min(Math.max(v, plot.left + m), plot.right - m)
+    const firedAt = r.fired ? clocks.indexOf(r.fired.clock) : -1, firedPoint = hotLine?.own.find(([i]) => i === firedAt)
+    const peak = hotLine?.own.reduce((a, b) => b[1] > a[1] ? b : a)
+    return {
+      width, height, plot, zero: y(0), yTicks, xTicks,
+      threshold: { y: y(limit), label: `Rule · ${limit} min for ${r.rule?.runs ?? 2} samples` },
+      lines: lines.map(({ own, ...l }) => l),
+      area: hotLine ? `${hotLine.points} ${x(hotLine.own.at(-1)[0])},${y(0)} ${x(hotLine.own[0][0])},${y(0)}` : null,
+      fired: firedPoint ? { x: x(firedAt), y: y(firedPoint[1]), pill: clamp(x(firedAt), 40), label: `Fired ${r.fired.clock.slice(11, 16)}`, color: hotLine.color } : null,
+      peak: peak && peak[0] !== firedAt ? { x: clamp(x(peak[0]), 30), y: y(peak[1]) - 9, label: `${signed(peak[1])} peak` } : null,
+      now: clocks.length < steps ? x(clocks.length - 1) : null
+    }
+  }
+
+  /** The chart as SVG markup. Every number goes through Number() and every text is escaped: nothing from the server
+   *  reaches the markup as markup. */
+  function chartSvg(c) {
+    const n = v => Number(v) || 0, t = v => String(v).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`)
+    const pts = v => String(v).replace(/[^0-9., ]/g, ''), { left, right, top, bottom } = c.plot
+    const line = (cls, x1, x2, y1, y2) => `<line class="${cls}" x1="${n(x1)}" x2="${n(x2)}" y1="${n(y1)}" y2="${n(y2)}"/>`
+    const text = (cls, x, y, s) => `<text class="${cls}" x="${n(x)}" y="${n(y)}">${t(s)}</text>`
+    return `<svg viewBox="0 0 ${n(c.width)} ${n(c.height)}" role="img" aria-label="Drive time above typical per approach">`
+      + (c.now == null ? '' : `<rect class="frChartFuture" x="${n(c.now)}" y="${n(top)}" width="${n(right - c.now)}" height="${n(bottom - top)}"/>`)
+      + c.yTicks.map(k => (k.y === n(bottom) ? '' : line(n(k.y) === n(c.zero) ? 'frChartZero' : 'frChartGrid', left, right, k.y, k.y))
+        + text(k.rule ? 'frChartTick frChartTickY frChartRule' : 'frChartTick frChartTickY', left - 8, n(k.y) + 4, k.label)).join('')
+      + line('frChartAxis', left, right, bottom, bottom)
+      + c.xTicks.map(k => line('frChartAxis', k.x, k.x, bottom, bottom + 4) + text('frChartTick frChartTickX', k.x, bottom + 18, k.label)).join('')
+      + line('frChartThreshold', left, right, c.threshold.y, c.threshold.y)
+      + text('frChartRule frChartRuleLabel', right, n(c.threshold.y) - 5, c.threshold.label)
+      + (c.area ? `<polygon class="frChartArea frChartC${n(c.lines.find(l => l.hot)?.color)}" points="${pts(c.area)}"/>` : '')
+      + [...c.lines].sort((a, b) => a.hot - b.hot).map(l => // the hot line on top
+        `<polyline class="frChartLine frChartC${n(l.color)}${l.hot ? ' frChartHot' : ''}${l.dim ? ' frChartDim' : ''}" points="${pts(l.points)}"/>`).join('')
+      + (c.now == null ? '' : line('frChartNow', c.now, c.now, top, bottom))
+      + (c.fired ? line('frChartFired', c.fired.x, c.fired.x, top, bottom)
+        + `<rect class="frChartPill" x="${n(c.fired.pill) - 40}" y="0" width="80" height="18" rx="9"/>` + text('frChartPillText', c.fired.pill, 12.5, c.fired.label)
+        + `<circle class="frChartDot frChartC${n(c.fired.color)}" cx="${n(c.fired.x)}" cy="${n(c.fired.y)}" r="4.5"/>` : '')
+      + (c.peak ? text('frChartPeak', c.peak.x, c.peak.y, c.peak.label) : '')
+      + '</svg>'
   }
 
   /** "Tue 20 Oct · 08:10" from the demo clock's naive date-time. */
@@ -186,12 +248,12 @@ sap.ui.define([], () => {
     const what = report && (report.delayMin != null ? `+${report.delayMin} min` : String(report.trafficType ?? '').toLowerCase().replace(/_/g, ' '))
     return {
       running: !!r.running, paused: !!r.paused, clock: r.clock, label: r.label ?? '', clockText: clockText(r.clock), chart: chart(r),
-      report: report ? `${report.road} ${report.location ?? ''} → ${report.direction ?? ''}: ${what}`.replace(/\s+/g, ' ') : '',
-      note: r.note ?? (r.fired ? `Rule fired at ${r.fired.clock.slice(11, 16)}: ${r.fired.origin} +${r.fired.delayMin} min over typical` : ''),
+      report: report ? { road: report.road ?? '', place: `${report.location ?? ''} → ${report.direction ?? ''}`.replace(/\s+/g, ' ').trim(), what } : null,
+      note: r.note ?? (r.fired ? `Rule fired at ${r.fired.clock.slice(11, 16)}: ${place(r.fired.origin)} +${r.fired.delayMin} min over typical` : ''),
       map: { ...BASE_MAP, ...(route && { center: `${mid(0)};${mid(1)}` }), spots: [{ position: point(FRA), label: 'FRA', type: 'Default' }],
         routes: route ? [{ position: coordinates.map(point).join(';') }] : [] }
     }
   }
 
-  return { flightLabel, note, dots, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick, mobileStatus, disruptionLabel, disruptionRoute, chart, replayView, replayError, demoMode, baseMap: BASE_MAP }
+  return { flightLabel, note, dots, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick, mobileStatus, disruptionLabel, disruptionRoute, chart, chartSvg, replayView, replayError, demoMode, baseMap: BASE_MAP }
 })

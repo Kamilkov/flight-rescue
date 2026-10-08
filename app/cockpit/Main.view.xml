@@ -124,7 +124,14 @@
           <Button text="Step ▸" tooltip="Play the next sample" press=".onStep" visible="{/replay/running}" enabled="{= !${/busy} &amp;&amp; !!${/replay/paused} }"/>
         </HBox>
         <fr:TrafficChart chart="{/replay/chart}"/>
-        <ObjectStatus text="{/replay/report}" state="Warning" visible="{= !!${/replay/report} }"/>
+        <VBox class="frReport" renderType="Bare" visible="{= !!${/replay/report} }">
+          <Label text="Latest Autobahn report"/>
+          <HBox class="frReportRow" renderType="Bare">
+            <Text class="frRoad" text="{/replay/report/road}" visible="{= !!${/replay/report/road} }"/>
+            <Text class="frReportPlace" text="{/replay/report/place}"/>
+            <ObjectStatus class="frReportWhat" text="{/replay/report/what}" state="Warning"/>
+          </HBox>
+        </VBox>
         <Text text="{/replay/note}" visible="{= !!${/replay/note} }"/>
       </VBox>
       <VBox class="frTrafficMap" renderType="Bare">
