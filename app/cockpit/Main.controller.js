@@ -60,7 +60,8 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       const { value } = await control("Disruptions?$filter=status eq 'Open'&$orderby=createdAt desc")
       const list = value.map(d => ({ ...d, label: logic.disruptionLabel(d), route: logic.disruptionRoute(d) }))
       const current = this.get('/disruption'), next = logic.pick(list, current, !!this.get('/plan/waiting'), this.chosen)
-      this.set('/disruptions', list)
+      // Only a changed list is set: re-rendering it every poll would move the focus ring onto the clicked item.
+      if (JSON.stringify(list) !== JSON.stringify(this.get('/disruptions'))) this.set('/disruptions', list)
       if (next?.ID !== current?.ID) this.clear()
       this.set('/disruption', next)
     },
@@ -93,7 +94,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       const d = this.get('/disruption'), planID = this.get('/planID')
       try {
         const board = d ? (await control(`flightBoard(disruption=${d.ID})`)).value : []
-        this.set('/board', board.map(f => ({ ...f, label: logic.flightLabel(f), note: logic.note(f), free: logic.dots(f).free })))
+        this.set('/board', board.map(f => ({ ...f, name: `${f.carrierId} ${f.connectionId}`, when: logic.flightWhen(f), note: logic.note(f), free: logic.dots(f).free })))
         this.set('/errors/board', '')
         if (planID) {
           const p = await control(`Plans(${planID})?$expand=items`), groups = logic.groupPlan(p.items)

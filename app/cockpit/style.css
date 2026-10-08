@@ -16,21 +16,48 @@ html, body { height: 100%; margin: 0; }
 .frMsg { padding: .25rem .75rem; border-radius: .75rem; margin-bottom: .5rem; max-width: 92%; }
 .frMsg[data-role="user"] { align-self: flex-end; background: var(--sapInformationBackground); }
 .frMsg[data-role="agent"] { align-self: flex-start; background: var(--sapNeutralBackground); }
-.frCard { display: flex; flex-direction: column; gap: .25rem; padding: .75rem 1rem; border: 2px solid var(--sapBrandColor); border-radius: .75rem; }
+.frCard { display: flex; flex-direction: column; gap: .25rem; padding: .75rem 1rem; border: 1px solid var(--sapList_BorderColor); border-radius: .75rem; box-shadow: var(--sapContent_Shadow0); }
 .frRow { display: flex; gap: .5rem; align-items: center; justify-content: space-between; }
 .frRow > .sapMObjStatus { flex: none; white-space: nowrap; }
 .sapMCLI .frRow { padding: .5rem .25rem .5rem .75rem; }
 .frAsk { display: flex; gap: .5rem; align-items: center; }
-.frSeatMap { display: flex; flex-wrap: wrap; gap: 2px; margin: .25rem 0 .75rem; }
-.frSeatMap i { width: 7px; height: 7px; border-radius: 2px; transition: background-color .4s; }
+.frPlane { position: relative; flex: none; }
+.frPlane > i { position: absolute; display: block; }
+.frWing { background: color-mix(in srgb, var(--sapNeutralBorderColor) 28%, var(--sapList_Background)); }
+.frWingUp { clip-path: polygon(0 0, 22% 0, 100% 100%, 35% 100%); }
+.frWingDown { clip-path: polygon(35% 0, 100% 0, 22% 100%, 0 100%); }
+.frStabUp { left: 0; clip-path: polygon(0 0, 30% 0, 100% 100%, 20% 100%); }
+.frStabDown { left: 0; clip-path: polygon(20% 0, 100% 0, 30% 100%, 0 100%); }
+.frFuselage { left: 0; box-sizing: border-box; background: var(--sapList_Background); border: 1px solid color-mix(in srgb, var(--sapNeutralBorderColor) 55%, transparent);
+  border-radius: 15px 46px 46px 15px / 45% 50% 50% 45%; }
+.frShield { width: 7px; height: 12px; border-radius: 0 7px 7px 0 / 0 50% 50% 0; background: var(--sapTextColor); opacity: .2; }
+.frCabin { position: absolute; display: flex; gap: 1.5px; }
+.frCol { display: flex; flex-direction: column; gap: 4px; }
+.frGroup { display: flex; flex-direction: column; gap: 1.5px; }
+.frSeat { display: block; flex: none; width: 5px; height: 5px; border-radius: 1.25px; transition: background-color .4s; }
 .frSeatBooked { background: var(--sapNeutralElementColor); }
 .frSeatHot { background: var(--sapCriticalElementColor); }
-.frSeatFree { box-shadow: inset 0 0 0 1px var(--sapNeutralBorderColor); }
+.frSeatFree { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sapNeutralBorderColor) 60%, transparent); }
+.frSeatHeld { background: var(--sapInformationBackground); box-shadow: inset 0 0 0 1.5px var(--sapBrandColor); }
 .frSeatMapCancelled .frSeatBooked { opacity: .45; }
-.frLegend { align-items: center; }
-.frLegend .frSeatMap { margin: 0 .25rem 0 .75rem; }
-.frLegend .frSeatMap:first-child { margin-left: 0; }
-.frSeatHeld { box-shadow: inset 0 0 0 2px var(--sapBrandColor); }
+.frLegend { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .375rem; margin-left: auto; }
+.frLegend .frSeat { width: 8px; height: 8px; border-radius: 2px; }
+.frLegend .frSeat:not(:first-child) { margin-left: .5rem; }
+.frLegend .sapMText { font-size: .75rem; color: var(--sapContent_LabelColor); }
+.frBoard { display: flex; flex-direction: column; gap: .5rem; }
+.frFlight { display: flex; align-items: center; gap: 1rem; }
+.frFlightInfo { flex: 0 0 7.5rem; display: flex; flex-direction: column; gap: .125rem; }
+.frPaneHead { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.frStep.sapMText { flex: none; width: 1.375rem; height: 1.375rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--sapBrandColor); color: var(--sapContent_ContrastTextColor); font-size: .75rem; font-weight: bold; }
+.frTag.sapMText { padding: 0 .375rem; border-radius: .375rem; background: var(--sapNeutralBackground); color: var(--sapContent_LabelColor); font-size: .75rem; }
+.frPaneChip { margin-left: auto; }
+.frStrong.sapMText { font-weight: bold; }
+.frMuted.sapMText { color: var(--sapContent_LabelColor); font-size: .8125rem; }
+.frDisruptions .sapMLIB { border: 1px solid transparent; border-radius: .625rem; }
+.frDisruptions .sapMLIB:has(.frRow[data-selected="yes"]) { background: var(--sapList_SelectionBackgroundColor); border-color: color-mix(in srgb, var(--sapList_SelectionBorderColor) 35%, transparent); }
+.frDisruptions .sapMLIB.sapMLIBFocusable:focus { outline: 2px solid var(--sapBrandColor); outline-offset: -2px; }
+.frDisruption { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: .125rem; }
 .frPane1 > * { flex-shrink: 0; }
 .frForm { gap: .5rem; }
 .frChart { display: flex; flex-direction: column; gap: .5rem; padding: .75rem .875rem; border: 1px solid var(--sapList_BorderColor); border-radius: .75rem; background: var(--sapList_Background); }

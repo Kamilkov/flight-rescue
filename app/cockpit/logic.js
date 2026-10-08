@@ -25,6 +25,25 @@ sap.ui.define([], () => {
     return { booked: booked - highlighted, highlighted, held, free: max - booked - held }
   }
 
+  /** "20 Oct · 10:10": a flight's departure on the seat board. */
+  const flightWhen = f => `${Number(f.flightDate.slice(8, 10))} ${MONTHS[Number(f.flightDate.slice(5, 7)) - 1]}${f.departureTime ? ` · ${f.departureTime.slice(0, 5)}` : ''}`
+
+  /** A flight's cabin for the seat map: seats abreast by size (one aisle up to 200 seats, then two) and each seat's state,
+   *  h highlighted, b booked, o offered, f free, with the counts of dots(f). There are no seat numbers in the data, so the
+   *  seats are shuffled, seeded by the flight: the same counts give the same seats on every poll, and a changed count
+   *  changes only the seats at its edge. */
+  function cabin(f, seed) {
+    const d = dots(f), max = d.highlighted + d.booked + d.held + d.free
+    let x = 2166136261 // FNV-1a of the seed, then xorshift
+    for (const ch of String(seed)) { x ^= ch.charCodeAt(0); x = Math.imul(x, 16777619) >>> 0 }
+    const rand = () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296 }
+    const order = Array.from({ length: max }, (_, i) => i), seats = new Array(max)
+    for (let i = max - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [order[i], order[j]] = [order[j], order[i]] }
+    const h = d.highlighted, b = h + d.booked, o = b + d.held
+    order.forEach((seat, k) => { seats[seat] = k < h ? 'h' : k < b ? 'b' : k < o ? 'o' : 'f' })
+    return { groups: max <= 200 ? [3, 3] : max <= 300 ? [2, 4, 2] : [3, 4, 3], seats }
+  }
+
   /** The Disruption pane's error text after a replay read. A failed read writes its message there; a good one takes back
    *  only that message (`wrote`), so another error that came meanwhile (a cancel that ABAP did not deliver) stays.
    *  `failure`: the read's error message, '' when it went through. */
@@ -39,7 +58,7 @@ sap.ui.define([], () => {
 
   /** The disruption list's line: the flight for a cancellation, the road for a traffic jam. */
   const disruptionLabel = d => d.kind === 'TrafficJam' ? `Traffic jam${d.road ? ` · ${d.road}` : ''}` : flightLabel(d)
-  const disruptionRoute = d => d.kind === 'TrafficJam' ? `${d.airportFrom} · via ${d.approach}` : `${d.airportFrom}–${d.airportTo}`
+  const disruptionRoute = d => d.kind === 'TrafficJam' ? `${d.airportFrom} · ${place(d.approach ?? '')} approach` : `${d.airportFrom}–${d.airportTo}`
 
   /** A flight as people type it ("lh", "402") in the form the server checks ("LH", "0402"). */
   function flightInput(f) {
@@ -255,5 +274,5 @@ sap.ui.define([], () => {
     }
   }
 
-  return { flightLabel, note, dots, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick, mobileStatus, disruptionLabel, disruptionRoute, chart, chartSvg, replayView, replayError, demoMode, baseMap: BASE_MAP }
+  return { flightLabel, flightWhen, note, dots, cabin, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick, mobileStatus, disruptionLabel, disruptionRoute, chart, chartSvg, replayView, replayError, demoMode, baseMap: BASE_MAP }
 })

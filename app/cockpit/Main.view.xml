@@ -18,7 +18,9 @@
     <HBox class="frPanes" renderType="Bare">
 
       <VBox class="frPane frPane1" renderType="Bare">
-        <Title text="1  Disruption"/>
+        <HBox class="frPaneHead" renderType="Bare">
+          <Text class="frStep" text="1"/><Title text="Disruption" level="H2"/>
+        </HBox>
         <MessageStrip text="{/errors/disruption}" type="Error" showIcon="true" visible="{= !!${/errors/disruption} }"/>
         <!-- ?demo=cancel or ?demo=traffic leaves one trigger here (logic.demoMode); without it, both. -->
         <VBox class="frForm" renderType="Bare" visible="{/show/cancel}">
@@ -35,12 +37,15 @@
         <Button text="Replay traffic incident" visible="{/show/traffic}" press=".onReplay" enabled="{= !${/busy} &amp;&amp; !${/replay/running} &amp;&amp; !${/replay/clock} }"/>
         <Text text="{/waiting}" visible="{= !!${/waiting} }" class="sapUiTinyMarginTop"/>
         <Title text="Open disruptions" level="H3" class="sapUiSmallMarginTop"/>
-        <List items="{/disruptions}" noDataText="No open disruption" showSeparators="None">
+        <List class="frDisruptions" items="{/disruptions}" noDataText="No open disruption" showSeparators="None">
           <CustomListItem type="Active" press=".onSelect">
+            <!-- The selection marks the row inside, not the item: re-rendering the item would put its focus ring back after a click. -->
             <HBox class="frRow" renderType="Bare">
-              <VBox>
-                <Text text="{label}"/>
-                <Label text="{route} · {reason}"/>
+              <customData><core:CustomData key="selected" value="{= ${ID} === ${/disruption/ID} ? 'yes' : 'no' }" writeToDom="true"/></customData>
+              <VBox class="frDisruption" renderType="Bare">
+                <Text class="frStrong" text="{label}"/>
+                <Text class="frMuted" text="{route}"/>
+                <Text class="frMuted" text="{reason}" maxLines="2"/>
               </VBox>
               <Button icon="sap-icon://decline" tooltip="Close disruption" type="Transparent" press=".onClose" enabled="{= !${/busy} }"/>
             </HBox>
@@ -49,7 +54,10 @@
       </VBox>
 
       <VBox class="frPane frPane2" renderType="Bare">
-        <Title text="2  Agent"/>
+        <HBox class="frPaneHead" renderType="Bare">
+          <Text class="frStep" text="2"/><Title text="Agent" level="H2"/>
+          <ObjectStatus class="frPaneChip" text="Needs your approval" state="Warning" inverted="true" visible="{= !!${/plan/waiting} }"/>
+        </HBox>
         <MessageStrip text="{/errors/agent}" type="Error" showIcon="true" visible="{= !!${/errors/agent} }"/>
         <VBox id="chat" class="frChat" renderType="Bare">
           <VBox items="{/chat}" renderType="Bare">
@@ -59,6 +67,7 @@
           </VBox>
           <VBox class="frCard" renderType="Bare" visible="{= !!${/plan} }">
             <Title text="{/plan/title}" level="H4"/>
+            <Text class="frMuted" text="Nobody moves unless they accept on their phone." visible="{= ${/disruption/kind} === 'TrafficJam' &amp;&amp; !!${/plan/waiting} }"/>
             <VBox items="{/plan/groups}" renderType="Bare">
               <HBox class="frRow" renderType="Bare">
                 <Text text="{= ${count} + (${/disruption/kind} === 'TrafficJam' ? (${count} === 1 ? ' offer' : ' offers') : (${count} === 1 ? ' booking' : ' bookings')) + ' → ' + ${label} }"/>
@@ -92,25 +101,29 @@
       </VBox>
 
       <VBox class="frPane frPane3" renderType="Bare">
-        <Title text="{= '3  Booking system' + (${/backend} === 'abap' ? ' (ABAP)' : ' (mock)') }"/>
+        <HBox class="frPaneHead" renderType="Bare">
+          <Text class="frStep" text="3"/><Title text="Booking system" level="H2"/>
+          <Text class="frTag" text="{= ${/backend} === 'abap' ? 'ABAP' : 'mock' }" visible="{= !!${/backend} }"/>
+          <!-- The legend reuses the control: a one-seat map per seat kind. -->
+          <HBox class="frLegend" renderType="Bare">
+            <fr:SeatMap seatsMax="1" seatsBooked="1" highlighted="1"/><Text text="affected, at risk or moved"/>
+            <fr:SeatMap seatsMax="1" seatsBooked="1"/><Text text="booked"/>
+            <fr:SeatMap seatsMax="1" held="1"/><Text text="offered"/>
+            <fr:SeatMap seatsMax="1"/><Text text="free"/>
+          </HBox>
+        </HBox>
         <MessageStrip text="{/errors/board}" type="Error" showIcon="true" visible="{= !!${/errors/board} }"/>
         <Text text="Cancel a flight or replay a traffic incident to see its route." visible="{= ${/board}.length === 0 }"/>
-        <VBox items="{/board}" renderType="Bare">
-          <VBox renderType="Bare">
-            <HBox class="frRow" renderType="Bare">
-              <Text text="{label}"/>
-              <ObjectStatus text="{note}" state="{= ${cancelled} ? 'Error' : ${affected} ? 'Warning' : ${free} > 0 ? 'Success' : 'None' }"/>
-            </HBox>
-            <fr:SeatMap seatsMax="{seatsMax}" seatsBooked="{seatsBooked}" highlighted="{highlighted}" held="{held}" cancelled="{cancelled}"/>
-          </VBox>
+        <VBox class="frBoard" items="{/board}" renderType="Bare">
+          <HBox class="frFlight" renderType="Bare">
+            <VBox class="frFlightInfo" renderType="Bare">
+              <Text class="frStrong" text="{name}"/>
+              <Text class="frMuted" text="{when}"/>
+              <ObjectStatus text="{note}" state="{= ${cancelled} ? 'Error' : ${affected} ? 'Warning' : ${free} > 0 ? 'Success' : ${held} > 0 ? 'Information' : 'None' }"/>
+            </VBox>
+            <fr:SeatMap seatsMax="{seatsMax}" seatsBooked="{seatsBooked}" highlighted="{highlighted}" held="{held}" cancelled="{cancelled}" seed="{carrierId}{connectionId}{flightDate}"/>
+          </HBox>
         </VBox>
-        <!-- The legend reuses the control: a one-seat map per dot kind. -->
-        <HBox class="frLegend" renderType="Bare">
-          <fr:SeatMap seatsMax="1" seatsBooked="1" highlighted="1"/><Label text="affected, at risk or moved"/>
-          <fr:SeatMap seatsMax="1" seatsBooked="1"/><Label text="booked"/>
-          <fr:SeatMap seatsMax="1" held="1"/><Label text="offered"/>
-          <fr:SeatMap seatsMax="1"/><Label text="free"/>
-        </HBox>
       </VBox>
 
     </HBox>

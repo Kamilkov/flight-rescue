@@ -304,7 +304,7 @@ describe('cockpit logic', () => {
 
   test('a traffic jam in the disruption list, the board and the agent pane', () => {
     assert.equal(logic.disruptionLabel({ kind: 'TrafficJam', road: 'A3' }), 'Traffic jam · A3')
-    assert.equal(logic.disruptionRoute({ kind: 'TrafficJam', airportFrom: 'FRA', approach: 'wiesbaden' }), 'FRA · via wiesbaden')
+    assert.equal(logic.disruptionRoute({ kind: 'TrafficJam', airportFrom: 'FRA', approach: 'badhomburg' }), 'FRA · Bad Homburg approach')
     assert.equal(logic.disruptionLabel({ carrierId: 'LH', connectionId: '0402', flightDate: '2026-10-14' }), 'LH 0402 · 14 Oct')
     assert.equal(logic.disruptionRoute({ airportFrom: 'FRA', airportTo: 'EWR' }), 'FRA–EWR')
     assert.equal(logic.note(load(380, 371, 4, { affected: true })), '4 at risk')
@@ -330,6 +330,27 @@ describe('cockpit logic', () => {
     assert.deepEqual(logic.demoMode('?demo=traffic'), { cancel: false, traffic: true })
     assert.deepEqual(logic.demoMode(''), { cancel: true, traffic: true }, 'no parameter: both, as before')
     assert.deepEqual(logic.demoMode('?demo=other'), { cancel: true, traffic: true }, 'an unknown mode hides nothing')
+  })
+
+  test('a cabin: seats abreast by size, every seat in its state, the same seats for the same flight', () => {
+    const tally = c => c.seats.reduce((n, s) => ({ ...n, [s]: (n[s] ?? 0) + 1 }), {})
+    const lh0400 = logic.cabin(load(380, 371, 4, { affected: true }), 'LH04002026-10-20')
+    assert.deepEqual(lh0400.groups, [3, 4, 3])
+    assert.deepEqual(tally(lh0400), { h: 4, b: 367, f: 9 })
+    assert.deepEqual(logic.cabin(load(380, 371, 4), 'LH04002026-10-20'), lh0400, 'the next poll draws the same seats')
+    assert.notDeepEqual(logic.cabin(load(380, 371, 4), 'LH04042026-10-20').seats, lh0400.seats, 'another flight, another pattern')
+    const dl0107 = logic.cabin(load(270, 268, 0, { held: 2 }), 'DL0107')
+    assert.deepEqual([dl0107.groups, tally(dl0107)], [[2, 4, 2], { b: 268, o: 2 }])
+    assert.deepEqual(logic.cabin(load(180, 0, 0), 'x').groups, [3, 3], 'one aisle up to 200 seats')
+    // An offer accepted: one offered seat becomes a moved one; the other seats stay where they were.
+    const before = logic.cabin(load(380, 377, 0, { held: 2 }), 'LH0404').seats, after = logic.cabin(load(380, 378, 1, { held: 1 }), 'LH0404').seats
+    assert.ok(before.filter((s, i) => s !== after[i]).length <= 2, 'at most two seats change')
+    assert.deepEqual(logic.cabin({}, 'x'), { groups: [3, 3], seats: [] })
+  })
+
+  test('a flight\'s departure for the seat board', () => {
+    assert.equal(logic.flightWhen({ flightDate: '2026-10-20', departureTime: '10:10:00' }), '20 Oct · 10:10')
+    assert.equal(logic.flightWhen({ flightDate: '2026-10-20' }), '20 Oct')
   })
 
   test('held seats are taken from the free ones, never more', () => {
