@@ -68,7 +68,19 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
     // The Traffic panel follows the replay on the server (started here or elsewhere). A failing read keeps the panel as it was and
     // shows in its pane; it never throws, so it cannot stop the rest of poll().
     async loadReplay() {
-      try { this.set('/replay', jam(await control('trafficReplay()'))) } catch (e) { this.set('/errors/disruption', e.message) }
+      try { this.set('/replay', jam(await control('trafficReplay()'))); this.frameMap() } catch (e) { this.set('/errors/disruption', e.message) }
+    },
+
+    // GeoMap honours its bound centre only at its first render, so frame it by hand when the centre changes. Never for an
+    // unchanged centre: that would undo the dispatcher's pan and zoom on every poll. Not rendered yet: the next poll does it.
+    frameMap() {
+      const center = this.get('/replay/map/center'), map = this.byId('map')
+      if (!this.get('/replay/clock')) this.framed = null // the panel is hidden; the next replay frames again
+      else if (center !== this.framed && map?.getDomRef()) {
+        const [lon, lat] = center.split(';').map(Number)
+        map.zoomToGeoPosition(lon, lat, this.get('/replay/map/zoom'))
+        this.framed = center
+      }
     },
 
     // Reads the booking system's seats and the plan. Called after every action and once a second during an approval.
@@ -151,6 +163,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
     onReplay() {
       this.run('disruption', 'Starting the replay', async () => {
         this.set('/replay', jam(await control('replayTraffic', {})))
+        this.frameMap()
       })
     },
 
@@ -159,6 +172,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       const paused = !this.get('/replay/paused')
       this.run('disruption', paused ? 'Pausing the replay' : 'Resuming the replay', async () => {
         this.set('/replay', jam(await control('pauseReplay', { paused })))
+        this.frameMap()
       })
     },
 
@@ -166,6 +180,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
     onStep() {
       this.run('disruption', 'Playing the next sample', async () => {
         this.set('/replay', jam(await control('stepReplay', {})))
+        this.frameMap()
       })
     },
 
@@ -222,6 +237,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
         this.set('/waiting', '')
         this.demo(info)
         this.set('/replay', jam(null))
+        this.frameMap()
         await this.loadDisruptions()
         await this.refresh()
       })

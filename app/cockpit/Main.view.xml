@@ -125,7 +125,7 @@
         <Text text="{/replay/note}" visible="{= !!${/replay/note} }"/>
       </VBox>
       <VBox class="frTrafficMap" renderType="Bare">
-        <vbm:GeoMap width="100%" height="100%" mapConfiguration="{/replay/map/config}" refMapLayerStack="DEFAULT"
+        <vbm:GeoMap id="map" width="100%" height="100%" mapConfiguration="{/replay/map/config}" refMapLayerStack="DEFAULT"
           centerPosition="{/replay/map/center}" zoomlevel="{/replay/map/zoom}" legendVisible="false" scaleVisible="false">
           <vbm:vos>
             <vbm:Routes items="{path: '/replay/map/routes', templateShareable: false}">
