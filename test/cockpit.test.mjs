@@ -325,6 +325,13 @@ describe('cockpit logic', () => {
     assert.deepEqual(logic.replayError('', 'The server answered 502.', ''), { text: '', wrote: '' }, 'the dispatcher\'s next action cleared it already')
   })
 
+  test('?demo= picks the trigger pane 1 shows; anything else shows both', () => {
+    assert.deepEqual(logic.demoMode('?demo=cancel'), { cancel: true, traffic: false })
+    assert.deepEqual(logic.demoMode('?demo=traffic'), { cancel: false, traffic: true })
+    assert.deepEqual(logic.demoMode(''), { cancel: true, traffic: true }, 'no parameter: both, as before')
+    assert.deepEqual(logic.demoMode('?demo=other'), { cancel: true, traffic: true }, 'an unknown mode hides nothing')
+  })
+
   test('held seats are taken from the free ones, never more', () => {
     assert.deepEqual(logic.dots(load(270, 268, 0, { held: 2 })), { booked: 268, highlighted: 0, held: 2, free: 0 })
     assert.deepEqual(logic.dots(load(270, 268, 0, { held: 5 })), { booked: 268, highlighted: 0, held: 2, free: 0 }, 'at most the free seats')

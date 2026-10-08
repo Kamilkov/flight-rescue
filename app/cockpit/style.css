@@ -32,6 +32,7 @@ html, body { height: 100%; margin: 0; }
 .frLegend .frSeatMap:first-child { margin-left: 0; }
 .frSeatHeld { box-shadow: inset 0 0 0 2px var(--sapBrandColor); }
 .frPane1 > * { flex-shrink: 0; }
+.frForm { gap: .5rem; }
 .frChart svg { display: block; width: 100%; height: 180px; overflow: visible; }
 .frChartLine { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .frChartLine0, .frChartKey0 { stroke: var(--sapChart_OrderedColor_1); color: var(--sapChart_OrderedColor_1); }

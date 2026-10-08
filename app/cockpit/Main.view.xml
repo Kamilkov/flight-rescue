@@ -20,16 +20,19 @@
       <VBox class="frPane frPane1" renderType="Bare">
         <Title text="1  Disruption"/>
         <MessageStrip text="{/errors/disruption}" type="Error" showIcon="true" visible="{= !!${/errors/disruption} }"/>
-        <Label text="Carrier" labelFor="carrier"/>
-        <Input id="carrier" value="{/form/carrierId}" maxLength="3" placeholder="LH"/>
-        <Label text="Flight number" labelFor="connection"/>
-        <Input id="connection" value="{/form/connectionId}" maxLength="4" placeholder="0402"/>
-        <Label text="Date" labelFor="date"/>
-        <DatePicker id="date" value="{/form/flightDate}" valueFormat="yyyy-MM-dd" displayFormat="d MMM yyyy"/>
-        <Label text="Reason" labelFor="reason"/>
-        <Input id="reason" value="{/form/reason}" maxLength="100"/>
-        <Button text="Cancel flight in ABAP" type="Emphasized" press=".onCancel" enabled="{= !${/busy} }"/>
-        <Button text="Replay traffic incident" press=".onReplay" enabled="{= !${/busy} &amp;&amp; !${/replay/running} &amp;&amp; !${/replay/clock} }"/>
+        <!-- ?demo=cancel or ?demo=traffic leaves one trigger here (logic.demoMode); without it, both. -->
+        <VBox class="frForm" renderType="Bare" visible="{/show/cancel}">
+          <Label text="Carrier" labelFor="carrier"/>
+          <Input id="carrier" value="{/form/carrierId}" maxLength="3" placeholder="LH"/>
+          <Label text="Flight number" labelFor="connection"/>
+          <Input id="connection" value="{/form/connectionId}" maxLength="4" placeholder="0402"/>
+          <Label text="Date" labelFor="date"/>
+          <DatePicker id="date" value="{/form/flightDate}" valueFormat="yyyy-MM-dd" displayFormat="d MMM yyyy"/>
+          <Label text="Reason" labelFor="reason"/>
+          <Input id="reason" value="{/form/reason}" maxLength="100"/>
+          <Button text="Cancel flight in ABAP" type="Emphasized" press=".onCancel" enabled="{= !${/busy} }"/>
+        </VBox>
+        <Button text="Replay traffic incident" visible="{/show/traffic}" press=".onReplay" enabled="{= !${/busy} &amp;&amp; !${/replay/running} &amp;&amp; !${/replay/clock} }"/>
         <Text text="{/waiting}" visible="{= !!${/waiting} }" class="sapUiTinyMarginTop"/>
         <Title text="Open disruptions" level="H3" class="sapUiSmallMarginTop"/>
         <List items="{/disruptions}" noDataText="No open disruption" showSeparators="None">

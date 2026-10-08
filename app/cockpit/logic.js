@@ -30,6 +30,13 @@ sap.ui.define([], () => {
    *  `failure`: the read's error message, '' when it went through. */
   const replayError = (text, wrote, failure) => failure ? { text: failure, wrote: failure } : { text: text === wrote ? '' : text, wrote: '' }
 
+  /** Which trigger pane 1 offers, from the page's query: `?demo=cancel` or `?demo=traffic` for a focused recording;
+   *  without it (or with anything else) both, as the README's links expect. */
+  const demoMode = search => {
+    const demo = new URLSearchParams(search).get('demo')
+    return { cancel: demo !== 'traffic', traffic: demo !== 'cancel' }
+  }
+
   /** The disruption list's line: the flight for a cancellation, the road for a traffic jam. */
   const disruptionLabel = d => d.kind === 'TrafficJam' ? `Traffic jam${d.road ? ` · ${d.road}` : ''}` : flightLabel(d)
   const disruptionRoute = d => d.kind === 'TrafficJam' ? `${d.airportFrom} · via ${d.approach}` : `${d.airportFrom}–${d.airportTo}`
@@ -186,5 +193,5 @@ sap.ui.define([], () => {
     }
   }
 
-  return { flightLabel, note, dots, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick, mobileStatus, disruptionLabel, disruptionRoute, chart, replayView, replayError, baseMap: BASE_MAP }
+  return { flightLabel, note, dots, flightInput, groupPlan, planTitle, reading, html, serial, agentView, waiting, pick, mobileStatus, disruptionLabel, disruptionRoute, chart, replayView, replayError, demoMode, baseMap: BASE_MAP }
 })

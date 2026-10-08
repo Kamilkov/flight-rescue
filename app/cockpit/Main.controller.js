@@ -22,7 +22,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       this.model = new JSONModel({
         backend: '', busy: false, busyText: '', waiting: '', agentBusy: '', errors: { disruption: '', agent: '', board: '' },
         form: { carrierId: '', connectionId: '', flightDate: '', reason: 'Aircraft technical issue' },
-        disruptions: [], disruption: null, board: [], replay: jam(null), ...conversation()
+        disruptions: [], disruption: null, board: [], replay: jam(null), show: logic.demoMode(location.search), ...conversation()
       })
       this.getView().setModel(this.model)
       this.refresh = logic.serial(this.refresh.bind(this)) // the polls during an approval must not overlap
