@@ -78,12 +78,12 @@ async function tick(run) {
 
 async function open(run, hit) {
   const clock = naive(Date.parse(hit.ts) + run.offset), r = reportAt(run.incident, hit.origin, hit.ts)
-  const reason = r ? `${r.road} ${r.location ?? ''} → ${r.direction ?? ''}: ${String(r.trafficType ?? 'jam').toLowerCase().replace(/_/g, ' ')}${r.delayMin ? `, +${r.delayMin} min` : ''} (Autobahn report)`
+  const reason = r ? `${r.road} ${r.location ?? ''} → ${r.direction ?? ''}: ${String(r.trafficType ?? 'jam').toLowerCase().replace(/_/g, ' ')} (Autobahn report), drive time +${hit.delayMin} min`
     : `Drive time from ${hit.origin} +${hit.delayMin} min above typical`
   const ID = cds.utils.uuid()
   await cds.db.tx(tx => tx.run(INSERT.into('fr.Disruptions').entries({
     ID, kind: 'TrafficJam', airportFrom: run.airport, jamDate: clock.slice(0, 10), jamTime: clock.slice(11, 19),
-    approach: hit.origin, road: r?.road ?? ROADS[hit.origin]?.[0] ?? null, delayMinutes: r?.delayMin ?? hit.delayMin,
+    approach: hit.origin, road: r?.road ?? ROADS[hit.origin]?.[0] ?? null, delayMinutes: hit.delayMin,
     reason: reason.replace(/\s+/g, ' ').slice(0, 200), agentStatus: 'Working'
   })))
   if (replay === run) agentStart.start(ID) // after the commit, so the agent finds the disruption; not after a reset meanwhile, which deletes the row

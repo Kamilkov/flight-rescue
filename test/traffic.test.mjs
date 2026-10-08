@@ -53,8 +53,8 @@ describe('the replay', () => {
     assert.equal(ok(await control('replayTraffic')).running, true)
     const d = await until(async () => { const x = await SELECT.one.from('fr.Disruptions').where({ kind: 'TrafficJam' }); return x?.agentStatus && x.agentStatus !== 'Working' && x })
     assert.deepEqual([d.airportFrom, d.jamDate, d.jamTime, d.approach, d.road, d.delayMinutes, d.agentStatus],
-      ['FRA', '2026-10-20', '08:10:00', 'wiesbaden', 'A3', 25, 'Done'])
-    assert.equal(d.reason, 'A3 Mönchhof - Frankfurter Kreuz → Würzburg: queuing traffic, +25 min (Autobahn report)')
+      ['FRA', '2026-10-20', '08:10:00', 'wiesbaden', 'A3', 15, 'Done'])
+    assert.equal(d.reason, 'A3 Mönchhof - Frankfurter Kreuz → Würzburg: queuing traffic (Autobahn report), drive time +15 min')
     const s = await finished()
     assert.deepEqual([s.running, s.clock, s.steps, s.samples.length, s.reports.length], [false, '2026-10-20T08:30:00', 6, 12, 1])
     assert.deepEqual(s.fired, { clock: '2026-10-20T08:10:00', origin: 'wiesbaden', delayMin: 15 })
