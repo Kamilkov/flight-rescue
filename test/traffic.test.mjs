@@ -129,3 +129,14 @@ describe('the replay', () => {
     assert.equal((await srv.post('/odata/v4/control/replayTraffic', {}, as('viewer'))).status, 403)
   })
 })
+
+describe('the shipped incident', () => {
+  test('the rule fires on it, on the label\'s approach, and it has a label and samples for every approach', () => {
+    const shipped = JSON.parse(require('node:fs').readFileSync(join(root, 'srv/traffic/data/incident.json'), 'utf8'))
+    const hit = traffic.fires(shipped.samples)
+    assert.ok(hit, 'the rule fires')
+    assert.equal(hit.origin, shipped.approach)
+    assert.match(shipped.label, shipped.simulated ? /^Simulated jam/ : /^Replay of a jam recorded on \d{4}-\d{2}-\d{2}/)
+    assert.deepEqual([...new Set(shipped.samples.map(s => s.origin))].sort(), ['badhomburg', 'darmstadt', 'offenbach', 'wiesbaden'])
+  })
+})

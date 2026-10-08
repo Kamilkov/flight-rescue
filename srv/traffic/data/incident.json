@@ -1,0 +1,526 @@
+{
+ "recordedOn": "2026-10-06",
+ "airport": "FRA",
+ "approach": "badhomburg",
+ "simulated": false,
+ "label": "Replay of a jam recorded on 2026-10-06 · passenger context simulated",
+ "samples": [
+  {
+   "ts": "2026-10-06T13:10:01+00:00",
+   "origin": "wiesbaden",
+   "live": 1585,
+   "typical": 1603
+  },
+  {
+   "ts": "2026-10-06T13:10:01+00:00",
+   "origin": "badhomburg",
+   "live": 1294,
+   "typical": 1286
+  },
+  {
+   "ts": "2026-10-06T13:10:01+00:00",
+   "origin": "offenbach",
+   "live": 1626,
+   "typical": 1571
+  },
+  {
+   "ts": "2026-10-06T13:10:01+00:00",
+   "origin": "darmstadt",
+   "live": 1393,
+   "typical": 1498
+  },
+  {
+   "ts": "2026-10-06T13:20:02+00:00",
+   "origin": "wiesbaden",
+   "live": 1603,
+   "typical": 1614
+  },
+  {
+   "ts": "2026-10-06T13:20:02+00:00",
+   "origin": "badhomburg",
+   "live": 1308,
+   "typical": 1288
+  },
+  {
+   "ts": "2026-10-06T13:20:02+00:00",
+   "origin": "offenbach",
+   "live": 1645,
+   "typical": 1568
+  },
+  {
+   "ts": "2026-10-06T13:20:02+00:00",
+   "origin": "darmstadt",
+   "live": 1403,
+   "typical": 1477
+  },
+  {
+   "ts": "2026-10-06T13:30:01+00:00",
+   "origin": "wiesbaden",
+   "live": 1588,
+   "typical": 1662
+  },
+  {
+   "ts": "2026-10-06T13:30:01+00:00",
+   "origin": "badhomburg",
+   "live": 1279,
+   "typical": 1292
+  },
+  {
+   "ts": "2026-10-06T13:30:01+00:00",
+   "origin": "offenbach",
+   "live": 1607,
+   "typical": 1603
+  },
+  {
+   "ts": "2026-10-06T13:30:01+00:00",
+   "origin": "darmstadt",
+   "live": 1384,
+   "typical": 1507
+  },
+  {
+   "ts": "2026-10-06T13:40:01+00:00",
+   "origin": "wiesbaden",
+   "live": 1594,
+   "typical": 1649
+  },
+  {
+   "ts": "2026-10-06T13:40:01+00:00",
+   "origin": "badhomburg",
+   "live": 1286,
+   "typical": 1319
+  },
+  {
+   "ts": "2026-10-06T13:40:01+00:00",
+   "origin": "offenbach",
+   "live": 1569,
+   "typical": 1614
+  },
+  {
+   "ts": "2026-10-06T13:40:01+00:00",
+   "origin": "darmstadt",
+   "live": 1360,
+   "typical": 1515
+  },
+  {
+   "ts": "2026-10-06T13:50:01+00:00",
+   "origin": "wiesbaden",
+   "live": 1642,
+   "typical": 1659
+  },
+  {
+   "ts": "2026-10-06T13:50:01+00:00",
+   "origin": "badhomburg",
+   "live": 1346,
+   "typical": 1320
+  },
+  {
+   "ts": "2026-10-06T13:50:01+00:00",
+   "origin": "offenbach",
+   "live": 1608,
+   "typical": 1618
+  },
+  {
+   "ts": "2026-10-06T13:50:01+00:00",
+   "origin": "darmstadt",
+   "live": 1439,
+   "typical": 1517
+  },
+  {
+   "ts": "2026-10-06T14:00:02+00:00",
+   "origin": "wiesbaden",
+   "live": 1639,
+   "typical": 1648
+  },
+  {
+   "ts": "2026-10-06T14:00:02+00:00",
+   "origin": "badhomburg",
+   "live": 1344,
+   "typical": 1321
+  },
+  {
+   "ts": "2026-10-06T14:00:02+00:00",
+   "origin": "offenbach",
+   "live": 1620,
+   "typical": 1614
+  },
+  {
+   "ts": "2026-10-06T14:00:02+00:00",
+   "origin": "darmstadt",
+   "live": 1431,
+   "typical": 1503
+  },
+  {
+   "ts": "2026-10-06T14:10:01+00:00",
+   "origin": "wiesbaden",
+   "live": 1704,
+   "typical": 1656
+  },
+  {
+   "ts": "2026-10-06T14:10:01+00:00",
+   "origin": "badhomburg",
+   "live": 1688,
+   "typical": 1320
+  },
+  {
+   "ts": "2026-10-06T14:10:01+00:00",
+   "origin": "offenbach",
+   "live": 1689,
+   "typical": 1628
+  },
+  {
+   "ts": "2026-10-06T14:10:01+00:00",
+   "origin": "darmstadt",
+   "live": 1449,
+   "typical": 1501
+  },
+  {
+   "ts": "2026-10-06T14:20:02+00:00",
+   "origin": "wiesbaden",
+   "live": 1701,
+   "typical": 1657
+  },
+  {
+   "ts": "2026-10-06T14:20:02+00:00",
+   "origin": "badhomburg",
+   "live": 1823,
+   "typical": 1321
+  },
+  {
+   "ts": "2026-10-06T14:20:02+00:00",
+   "origin": "offenbach",
+   "live": 1660,
+   "typical": 1633
+  },
+  {
+   "ts": "2026-10-06T14:20:02+00:00",
+   "origin": "darmstadt",
+   "live": 1455,
+   "typical": 1494
+  },
+  {
+   "ts": "2026-10-06T14:30:01+00:00",
+   "origin": "wiesbaden",
+   "live": 1696,
+   "typical": 1649
+  },
+  {
+   "ts": "2026-10-06T14:30:01+00:00",
+   "origin": "badhomburg",
+   "live": 1843,
+   "typical": 1324
+  },
+  {
+   "ts": "2026-10-06T14:30:01+00:00",
+   "origin": "offenbach",
+   "live": 1649,
+   "typical": 1634
+  },
+  {
+   "ts": "2026-10-06T14:30:01+00:00",
+   "origin": "darmstadt",
+   "live": 1440,
+   "typical": 1490
+  },
+  {
+   "ts": "2026-10-06T14:40:01+00:00",
+   "origin": "wiesbaden",
+   "live": 1673,
+   "typical": 1644
+  },
+  {
+   "ts": "2026-10-06T14:40:01+00:00",
+   "origin": "badhomburg",
+   "live": 1899,
+   "typical": 1323
+  },
+  {
+   "ts": "2026-10-06T14:40:01+00:00",
+   "origin": "offenbach",
+   "live": 1690,
+   "typical": 1634
+  },
+  {
+   "ts": "2026-10-06T14:40:01+00:00",
+   "origin": "darmstadt",
+   "live": 1421,
+   "typical": 1494
+  },
+  {
+   "ts": "2026-10-06T14:50:01+00:00",
+   "origin": "wiesbaden",
+   "live": 1658,
+   "typical": 1635
+  },
+  {
+   "ts": "2026-10-06T14:50:01+00:00",
+   "origin": "badhomburg",
+   "live": 1388,
+   "typical": 1319
+  },
+  {
+   "ts": "2026-10-06T14:50:01+00:00",
+   "origin": "offenbach",
+   "live": 1613,
+   "typical": 1613
+  },
+  {
+   "ts": "2026-10-06T14:50:01+00:00",
+   "origin": "darmstadt",
+   "live": 1400,
+   "typical": 1490
+  },
+  {
+   "ts": "2026-10-06T15:00:01+00:00",
+   "origin": "wiesbaden",
+   "live": 1775,
+   "typical": 1648
+  },
+  {
+   "ts": "2026-10-06T15:00:01+00:00",
+   "origin": "badhomburg",
+   "live": 1454,
+   "typical": 1329
+  },
+  {
+   "ts": "2026-10-06T15:00:01+00:00",
+   "origin": "offenbach",
+   "live": 1688,
+   "typical": 1592
+  },
+  {
+   "ts": "2026-10-06T15:10:01+00:00",
+   "origin": "wiesbaden",
+   "live": 1759,
+   "typical": 1647
+  },
+  {
+   "ts": "2026-10-06T15:10:01+00:00",
+   "origin": "badhomburg",
+   "live": 1606,
+   "typical": 1336
+  },
+  {
+   "ts": "2026-10-06T15:10:01+00:00",
+   "origin": "offenbach",
+   "live": 1708,
+   "typical": 1589
+  },
+  {
+   "ts": "2026-10-06T15:10:01+00:00",
+   "origin": "darmstadt",
+   "live": 1479,
+   "typical": 1489
+  },
+  {
+   "ts": "2026-10-06T15:20:02+00:00",
+   "origin": "wiesbaden",
+   "live": 1745,
+   "typical": 1660
+  },
+  {
+   "ts": "2026-10-06T15:20:02+00:00",
+   "origin": "badhomburg",
+   "live": 1600,
+   "typical": 1338
+  },
+  {
+   "ts": "2026-10-06T15:20:02+00:00",
+   "origin": "offenbach",
+   "live": 1699,
+   "typical": 1569
+  },
+  {
+   "ts": "2026-10-06T15:20:02+00:00",
+   "origin": "darmstadt",
+   "live": 1471,
+   "typical": 1473
+  },
+  {
+   "ts": "2026-10-06T15:30:02+00:00",
+   "origin": "wiesbaden",
+   "live": 1685,
+   "typical": 1666
+  },
+  {
+   "ts": "2026-10-06T15:30:02+00:00",
+   "origin": "badhomburg",
+   "live": 1508,
+   "typical": 1321
+  },
+  {
+   "ts": "2026-10-06T15:30:02+00:00",
+   "origin": "offenbach",
+   "live": 1687,
+   "typical": 1566
+  },
+  {
+   "ts": "2026-10-06T15:30:02+00:00",
+   "origin": "darmstadt",
+   "live": 1479,
+   "typical": 1464
+  },
+  {
+   "ts": "2026-10-06T15:40:01+00:00",
+   "origin": "wiesbaden",
+   "live": 1652,
+   "typical": 1647
+  },
+  {
+   "ts": "2026-10-06T15:40:01+00:00",
+   "origin": "badhomburg",
+   "live": 1484,
+   "typical": 1317
+  },
+  {
+   "ts": "2026-10-06T15:40:01+00:00",
+   "origin": "offenbach",
+   "live": 1683,
+   "typical": 1567
+  },
+  {
+   "ts": "2026-10-06T15:40:01+00:00",
+   "origin": "darmstadt",
+   "live": 1502,
+   "typical": 1463
+  }
+ ],
+ "reports": [
+  {
+   "ts": "2026-10-06T14:20:02+00:00",
+   "road": "A5",
+   "location": "Frankfurt am Main-Niederrad - Frankfurt am Main-Flughafen-Nord",
+   "direction": "Darmstadt",
+   "delayMin": 5,
+   "trafficType": "SLOW_TRAFFIC"
+  },
+  {
+   "ts": "2026-10-06T14:30:01+00:00",
+   "road": "A5",
+   "location": "Westkreuz Frankfurt am Main - Frankfurt am Main-Flughafen-Nord",
+   "direction": "Darmstadt",
+   "delayMin": 12,
+   "trafficType": "QUEUING_TRAFFIC"
+  },
+  {
+   "ts": "2026-10-06T14:40:01+00:00",
+   "road": "A5",
+   "location": "Westkreuz Frankfurt am Main - Frankfurt am Main-Flughafen-Nord",
+   "direction": "Darmstadt",
+   "delayMin": 19,
+   "trafficType": "QUEUING_TRAFFIC"
+  },
+  {
+   "ts": "2026-10-06T14:50:01+00:00",
+   "road": "A5",
+   "location": "Nordwestkreuz Frankfurt am Main - Frankfurt am Main-Flughafen-Nord",
+   "direction": "Darmstadt",
+   "delayMin": 7,
+   "trafficType": "QUEUING_TRAFFIC"
+  }
+ ],
+ "geo": {
+  "lat": 50.07944510858218,
+  "lon": 8.61722069191956,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     8.617220692,
+     50.079445109
+    ],
+    [
+     8.6171151,
+     50.079192001
+    ],
+    [
+     8.6169922,
+     50.078943701
+    ],
+    [
+     8.6163789,
+     50.077700301
+    ],
+    [
+     8.6161002,
+     50.077154801
+    ],
+    [
+     8.6158231,
+     50.076606601
+    ],
+    [
+     8.6156758,
+     50.076315201
+    ],
+    [
+     8.6154344,
+     50.075838401
+    ],
+    [
+     8.6151826,
+     50.075334701
+    ],
+    [
+     8.6148746,
+     50.074721301
+    ],
+    [
+     8.614503,
+     50.073976601
+    ],
+    [
+     8.6143478,
+     50.073662401
+    ],
+    [
+     8.6141938,
+     50.073359901
+    ],
+    [
+     8.6139497,
+     50.072874801
+    ],
+    [
+     8.6139067,
+     50.072735301
+    ],
+    [
+     8.6132849,
+     50.071482601
+    ],
+    [
+     8.6128942,
+     50.070705801
+    ],
+    [
+     8.6123509,
+     50.069599801
+    ],
+    [
+     8.611729,
+     50.068373101
+    ],
+    [
+     8.610533,
+     50.065987001
+    ],
+    [
+     8.6098546,
+     50.064647101
+    ],
+    [
+     8.6094095,
+     50.063726901
+    ],
+    [
+     8.6088495,
+     50.062619201
+    ],
+    [
+     8.608694242,
+     50.062306291
+    ]
+   ]
+  }
+ }
+}

@@ -342,6 +342,7 @@ describe('cockpit logic', () => {
       geo: { geometry: '{"type":"LineString","coordinates":[[8.47,50.048],[8.55,50.058]]}' } })
     assert.deepEqual([v.running, v.clockText, v.report, v.note], [true, 'Tue 20 Oct · 08:10', 'A3 Mönchhof - Frankfurter Kreuz → Würzburg: +25 min', 'Rule fired at 08:10: wiesbaden +15 min over typical'])
     assert.deepEqual(v.map.routes, [{ position: '8.47;50.048;0;8.55;50.058;0' }])
+    assert.equal(v.map.center, '8.5161;50.04795', 'the middle of the box around FRA and the jam line')
     assert.deepEqual(v.map.spots, [{ position: '8.5622;50.0379;0', label: 'FRA', type: 'Default' }])
     assert.equal(v.map.config.MapProvider[0].name, 'OSM')
     assert.deepEqual(logic.replayView({ running: false, samples: [] }), { running: false, clock: '' })
@@ -354,6 +355,7 @@ describe('cockpit logic', () => {
       const v = logic.replayView({ running: true, clock: '2026-10-20T08:10:00', samples: [], geo })
       assert.equal(v.clockText, 'Tue 20 Oct · 08:10', JSON.stringify(geo))
       assert.deepEqual(v.map.routes, [], JSON.stringify(geo))
+      assert.equal(v.map.center, logic.baseMap.center, JSON.stringify(geo))
     }
   })
 

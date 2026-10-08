@@ -164,14 +164,16 @@ sap.ui.define([], () => {
   function replayView(r) {
     if (!r?.clock) return { running: !!r?.running, clock: '' }
     const report = r.reports?.at(-1), point = p => `${p[0]};${p[1]};0`
-    const coordinates = r.geo?.geometry ? JSON.parse(r.geo.geometry)?.coordinates ?? [] : []
+    const coordinates = r.geo?.geometry ? JSON.parse(r.geo.geometry)?.coordinates ?? [] : [], route = coordinates.length > 1
+    // With a route, the frame is centred on the middle of the box around FRA and the jam line, so both are in view.
+    const mid = k => { const v = [FRA[k], ...coordinates.map(c => c[k])]; return Math.round((Math.min(...v) + Math.max(...v)) / 2 * 1e5) / 1e5 }
     const what = report && (report.delayMin != null ? `+${report.delayMin} min` : String(report.trafficType ?? '').toLowerCase().replace(/_/g, ' '))
     return {
       running: !!r.running, clock: r.clock, label: r.label ?? '', clockText: clockText(r.clock), chart: chart(r),
       report: report ? `${report.road} ${report.location ?? ''} → ${report.direction ?? ''}: ${what}`.replace(/\s+/g, ' ') : '',
       note: r.note ?? (r.fired ? `Rule fired at ${r.fired.clock.slice(11, 16)}: ${r.fired.origin} +${r.fired.delayMin} min over typical` : ''),
-      map: { ...BASE_MAP, spots: [{ position: point(FRA), label: 'FRA', type: 'Default' }],
-        routes: coordinates.length > 1 ? [{ position: coordinates.map(point).join(';') }] : [] }
+      map: { ...BASE_MAP, ...(route && { center: `${mid(0)};${mid(1)}` }), spots: [{ position: point(FRA), label: 'FRA', type: 'Default' }],
+        routes: route ? [{ position: coordinates.map(point).join(';') }] : [] }
     }
   }
 

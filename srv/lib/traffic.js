@@ -8,7 +8,7 @@ const LOG = cds.log('traffic')
 // The traffic replay (post #3): plays a recorded jam sample by sample on the demo clock and, when the rule fires, opens
 // a TrafficJam disruption and starts the agent, as ABAP's event does for a cancellation. The demo clock is FRA local
 // time, like /DMO/ departure times: naive 'YYYY-MM-DDTHH:MM:SS' values, computed as if UTC and never converted.
-const RULE = { minDelayMin: 10, runs: 2 } // ponytail: placeholder until the spike report (2026-10-08) sets it (Task 9)
+const RULE = { minDelayMin: 6, runs: 2 } // from the airport-traffic spike report (2026-10-08)
 const LEAD_MIN = 120 // the rule fires this long before the scenario flight departs
 const ROADS = { wiesbaden: ['A66', 'A3'], badhomburg: ['A5'], offenbach: ['A3'], darmstadt: ['A5', 'A67'] }
 const settings = () => ({ stepMs: 2000, data: join(__dirname, '../traffic/data/incident.json'), ...cds.env.requires.traffic })

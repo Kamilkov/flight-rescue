@@ -34,11 +34,11 @@ const until = async (fn, ms = 20000) => {
   }
 }
 
-/** A jam on the A3 (approach wiesbaden), 2 h before the mock's LH 0400 on 2026-10-20 (10:10). */
+/** A jam on the A5 (approach badhomburg), 2 h before the mock's LH 0400 on 2026-10-20 (10:10). */
 async function jam(fields = {}) {
   const ID = randomUUID()
   await INSERT.into('fr.Disruptions').entries({ ID, kind: 'TrafficJam', airportFrom: 'FRA', jamDate: '2026-10-20', jamTime: '08:10:00',
-    approach: 'wiesbaden', road: 'A3', delayMinutes: 25, reason: 'A3 Mönchhof - Frankfurter Kreuz → Würzburg: queuing traffic, +25 min (test)', ...fields })
+    approach: 'badhomburg', road: 'A5', delayMinutes: 25, reason: 'A5 Niederrad - Flughafen-Nord → Darmstadt: queuing traffic, +25 min (test)', ...fields })
   return ID
 }
 
@@ -59,7 +59,7 @@ describe('traffic scenario data', () => {
   test('passenger context: the 9 scenario bookings, one of them the phone booking', async () => {
     const rows = await SELECT.from('fr.PassengerContext').orderBy('travelId', 'bookingId')
     assert.deepEqual(rows.map(r => r.arrival === 'Car' ? `Car ${r.approach}` : r.arrival),
-      ['Car wiesbaden', 'Car wiesbaden', 'Car wiesbaden', 'Car wiesbaden', 'Car darmstadt', 'Train', 'Train', 'CheckedIn', 'CheckedIn'])
+      ['Car badhomburg', 'Car badhomburg', 'Car badhomburg', 'Car badhomburg', 'Car darmstadt', 'Train', 'Train', 'CheckedIn', 'CheckedIn'])
     assert.deepEqual(rows.filter(r => r.phone).map(r => `${r.travelId}/${r.bookingId}`), ['90000102/0001'])
     assert.equal(cds.services.RebookAgentService.entities.PassengerContext, undefined, 'never exposed to the agent')
   })
@@ -70,7 +70,7 @@ describe('traffic scenario data', () => {
 
   test('a jam needs no flight; a disruption without a kind is a cancellation', async () => {
     const d = await SELECT.one.from('fr.Disruptions', await jam())
-    assert.deepEqual([d.kind, d.carrierId, d.jamDate, d.jamTime, d.approach], ['TrafficJam', null, '2026-10-20', '08:10:00', 'wiesbaden'])
+    assert.deepEqual([d.kind, d.carrierId, d.jamDate, d.jamTime, d.approach], ['TrafficJam', null, '2026-10-20', '08:10:00', 'badhomburg'])
     const ID = randomUUID()
     await INSERT.into('fr.Disruptions').entries({ ID, carrierId: 'LH', connectionId: '0400', flightDate: '2026-10-12' })
     assert.equal((await SELECT.one.from('fr.Disruptions', ID)).kind, 'Cancellation')
@@ -86,7 +86,7 @@ describe('impact of a traffic jam', () => {
       '90000101/0001 LH 0400 2026-10-20', '90000101/0002 LH 0400 2026-10-20', '90000102/0001 LH 0400 2026-10-20', '90000102/0002 LH 0400 2026-10-20'])
     assert.deepEqual(impact.alternatives.map(a => [a.carrierId, a.connectionId, a.departureTime, a.seatsAvailable, a.forFlight]),
       [['DL', '0107', '11:50:00', 2, 'LH 0400 2026-10-20'], ['LH', '0404', '17:15:00', 3, 'LH 0400 2026-10-20']])
-    assert.equal(impact.note, '9 bookings with passenger context on LH 0400 2026-10-20: 4 at risk (driving via wiesbaden), 1 driving via another approach, 2 by train, 2 checked in. Enough seats to offer all 4 bookings at risk a later flight.')
+    assert.equal(impact.note, '9 bookings with passenger context on LH 0400 2026-10-20: 4 at risk (driving via badhomburg), 1 driving via another approach, 2 by train, 2 checked in. Enough seats to offer all 4 bookings at risk a later flight.')
   })
 
   test('the jammed approach decides who is at risk', async () => {

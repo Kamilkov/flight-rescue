@@ -23,7 +23,7 @@ const booking = (TravelId, BookingId) => SELECT.one.from('ZFR_REBOOK.Bookings', 
 async function jam() {
   const ID = randomUUID()
   await INSERT.into('fr.Disruptions').entries({ ID, kind: 'TrafficJam', airportFrom: 'FRA', jamDate: '2026-10-20', jamTime: '08:10:00',
-    approach: 'wiesbaden', road: 'A3', delayMinutes: 25, reason: 'A3 Mönchhof - Frankfurter Kreuz → Würzburg: queuing traffic, +25 min (test)' })
+    approach: 'badhomburg', road: 'A5', delayMinutes: 25, reason: 'A5 Niederrad - Flughafen-Nord → Darmstadt: queuing traffic, +25 min (test)' })
   return ID
 }
 /** A jam whose offers the agent proposed (paused at sendOffers), and with `send`, the dispatcher approved. */
@@ -62,7 +62,7 @@ describe('the passenger\'s offer', () => {
     const o = ok(await myOffer())
     assert.deepEqual([o.status, o.travelId, o.bookingId, o.current.connectionId, o.current.departureTime, o.offered.connectionId, o.offered.departureTime],
       ['Offered', '90000102', '0001', '0400', '10:10:00', '0404', '17:15:00'])
-    assert.match(o.reason, /^A3 Mönchhof/)
+    assert.match(o.reason, /^A5 Niederrad/)
     const a = ok(await accept())
     assert.deepEqual([a.status, a.message], ['Rebooked', 'Moved to LH 0404 2026-10-20.'])
     const b = await booking('90000102', '0001')
