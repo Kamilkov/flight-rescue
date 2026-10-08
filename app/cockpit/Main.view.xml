@@ -128,7 +128,7 @@
 
     </HBox>
     <!-- The Traffic panel takes the bottom half while there is a replay: clock, controls and chart on the left, the map on the right. -->
-    <HBox class="frPane frTraffic" renderType="Bare" visible="{= !!${/replay/clock} }">
+    <HBox class="frPane frTraffic" renderType="Bare" visible="{= !!${/replay/clock} &amp;&amp; ${/show/traffic} }">
       <VBox class="frTrafficInfo" renderType="Bare">
         <Label text="{/replay/label}" wrapping="true"/>
         <HBox class="frTrafficBar" renderType="Bare">

@@ -59,7 +59,7 @@ Without `ABAP_URL`, ZFR_REBOOK is mocked from `srv/external/` with /DMO/-shaped 
 
 ## The cockpit
 
-One page for the whole flow, at http://localhost:4004/cockpit/index.html (sign in with `dispatcher`, empty password). It needs internet access: SAPUI5 is loaded from `ui5.sap.com`. For a recording of one trigger, `?demo=cancel` leaves only the cancellation form in the Disruption pane and `?demo=traffic` only **Replay traffic incident**; everything else is the same page.
+One page for the whole flow, at http://localhost:4004/cockpit/index.html (sign in with `dispatcher`, empty password). It needs internet access: SAPUI5 is loaded from `ui5.sap.com`. For a recording of one trigger, `?demo=cancel` leaves only the cancellation form in the Disruption pane and hides the Traffic panel, and `?demo=traffic` leaves only **Replay traffic incident**; everything else is the same page, so press **Reset demo** before recording one trigger after the other.
 
 1. **Disruption:** enter a flight and cancel it in the booking system. The page waits for ABAP's event; after 15 s
    it also shows whether ABAP has reported it yet.
