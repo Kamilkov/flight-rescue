@@ -82,7 +82,7 @@ Create a package (for example `ZFLIGHT_RESCUE`) and add the objects from `abap/`
 | Object | File |
 |---|---|
 | Table `ZFR_BOOKING` | `zfr_booking.tabl.asddls` |
-| Class `ZCL_FR_GENERATE_DATA` | `zcl_fr_generate_data.clas.abap`. Run it with F9: it copies `/DMO/BOOKING` into `ZFR_BOOKING` and adds the demo scenario (about 1,500 bookings) and the traffic scenario's 9 ([below](#the-abap-event-and-the-vps)), with travel IDs from `90000000`, so nothing writes to `/DMO/` tables |
+| Class `ZCL_FR_GENERATE_DATA` | `zcl_fr_generate_data.clas.abap`. Run it with F9: it copies `/DMO/BOOKING` into `ZFR_BOOKING` and adds the demo scenario (about 1,500 bookings) and the traffic scenario (9 on LH 0400, plus fillers on the later flights; [below](#the-abap-event-and-the-vps)), with travel IDs from `90000000`, so nothing writes to `/DMO/` tables |
 | CDS views `ZI_FR_FlightLoad`, `ZI_FR_Flight`, `ZR_FR_Booking` | `*.ddls.asddls` |
 | Abstract entity `ZA_FR_RebookTarget` | `za_fr_rebooktarget.ddls.asddls` |
 | Behavior definition `ZR_FR_Booking` | `zr_fr_booking.bdef.asbdef`. Use the quick fix to create `ZBP_R_FR_BOOKING`, then paste the local types from `zbp_r_fr_booking.clas.locals_imp.abap` |
@@ -123,18 +123,18 @@ Things to check against your published binding:
 The agent's second trigger. No flight is cancelled: a jam on the way to the airport puts passengers at risk of missing theirs, and each gets an offer for a later flight. Nobody moves unless they accept.
 
 1. **Replay:** **Replay traffic incident** plays a recorded jam onto the scenario flight's morning, one sample every 2 s: the A5 towards Darmstadt on Tue 2026-10-06, about 16:10–16:40 CEST. A sample is the drive time to Terminal 1 from one of four approaches, live and typical (Google Routes); Autobahn jam reports come with it.
-2. **Rule:** an approach at least 6 min over typical for 2 samples in a row (`RULE` in `srv/lib/traffic.js`). Bad Homburg needs +6.1, then +8.4 min, so it fires on the second sample, while the Autobahn report still says 5 min.
+2. **Rule:** an approach at least 6 min over typical for 2 samples in a row (`RULE` in `srv/lib/traffic.js`). Bad Homburg runs +6.1, then +8.4 min over typical, so it fires on the second sample, while the Autobahn report still says 5 min.
 3. **Disruption:** the server opens a `TrafficJam` disruption and starts the agent as the dispatcher, as ABAP's event does for a cancellation. Its `delayMinutes` is the drive-time delay the rule measured (+8).
 4. **Offers:** the agent proposes a later flight for each booking at risk and calls `sendOffers`; the dispatcher presses **Send offers**.
 5. **Accept:** `/passenger/index.html` shows the passenger their offer; **Accept** has ABAP move that one booking.
 
-While a replay exists (until **Reset demo**), a Traffic panel fills the bottom half of the cockpit: clock, chart, latest report, the rule and a map. **Pause** and **Resume** freeze the replay, not the agent; **Step ▸** plays one sample while paused (`NO_REPLAY`, `NOT_PAUSED`).
+While a replay exists (until **Reset demo**), a Traffic panel fills the bottom half of the cockpit: clock, chart, latest report, the rule and a map. **Pause** and **Resume** freeze the replay, not the agent; **Step ▸** plays one sample while paused (refused otherwise with `NO_REPLAY` or `NOT_PAUSED`).
 
-**Running it.** Against the mock: `npm run watch`, **Replay traffic incident**, **Send offers** when the plan appears, then http://localhost:4004/passenger/index.html as `passenger` (empty password); restart the app between runs. Against ABAP, press **Reset demo** first and after every restart: the app learns the scenario's flight from it (`NO_SCENARIO` without).
+**Running it.** Against the mock: `npm run watch`, **Replay traffic incident**, **Send offers** when the plan appears, then http://localhost:4004/passenger/index.html as `passenger` (empty password); restart the app between runs. Against ABAP, press **Reset demo** first and after every restart: the app learns the scenario's flight from it (refused with `NO_SCENARIO` without).
 
 **The scenario** is LH 0400 FRA–JFK with 9 scenario bookings (travels 90000101–105); in the mock it flies on 2026-10-20 with DL 0107 and LH 0404 later that day. In ABAP, `ZCL_FR_GENERATE_DATA` picks the day ([below](#the-abap-event-and-the-vps)), and the flight may also carry bookings copied from /DMO/, which have no passenger context and are not contacted. The recording, `srv/traffic/data/incident.json`, comes from a separate 48 h probe (not in this repo) through `scripts/import-incident.mjs`; `--simulate` makes a labelled simulated jam instead.
 
-**What is simulated.** The jam is real. The passenger context is not (`db/data/fr-PassengerContext.csv`): of the 9 scenario bookings, 4 drive via Bad Homburg, 1 via Darmstadt, 2 take the train and 2 have checked in, and the `passenger` user stands for 90000102/0001. Nor is the demo clock (FRA local time): the recording is shifted so that the rule fires 2 h before the flight leaves (`LEAD_MIN`). The cockpit's label and the phone page say so.
+**What is simulated.** The jam is real. The passenger context is not (`db/data/fr-PassengerContext.csv`): of the 9 scenario bookings, 4 drive via Bad Homburg, 1 via Darmstadt, 2 take the train and 2 have checked in, and the `passenger` user stands for 90000102/0001. Nor is the demo clock (FRA local time): the recording is shifted so that the rule fires 2 h before the flight leaves (`LEAD_MIN`). The cockpit's label says the passenger context is simulated, and the phone page says it stands for the airline's app.
 
 ## Design choices
 
@@ -146,7 +146,7 @@ While a replay exists (until **Reset demo**), a Traffic panel fills the bottom h
 - **Minimal data to the model.** The model sees travel and booking IDs, flights and seat counts. It doesn't see customer data.
 - **Nobody has to move for a jam.** A jam plan is a set of offers; the dispatcher approves sending them (`sendOffers`, `@agent.hitl`), and each passenger answers alone. `applyRebooking` and `sendOffers` refuse each other's plans (`WRONG_KIND`).
 - **The server picks who is at risk.** Drivers via the jammed approach, on flights leaving 60–180 min after the jam. An offer is a flight on the same route that day, leaving at least 45 min after the booking's own, with a seat free. The model sees booking references and counts, never the passenger context, which no service the agent can reach exposes. Bookings without context are not contacted.
-- **Offers hold seats.** Seats offered and not answered yet count as taken for every disruption, cancellations included, until the passenger answers or the dispatcher closes the jam. In the demo only the phone booking answers, so the other offers hold their seats until the jam is closed.
+- **Offers hold seats.** Seats offered and not answered yet count as taken for every disruption, cancellations included, until the passenger answers or the dispatcher closes the jam. In the demo only the `passenger` booking (90000102/0001) answers, so the other offers hold their seats until the jam is closed.
 - **SAP API Policy.** The agent only exposes this app's own services and a custom `Z` RAP service, which is within what the CAP docs allow for CAP-level agents. It does not proxy SAP application APIs.
 
 ## Tests
