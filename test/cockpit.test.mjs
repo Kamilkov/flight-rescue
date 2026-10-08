@@ -340,13 +340,18 @@ describe('cockpit logic', () => {
       reports: [{ clock: '2026-10-20T08:00:00', road: 'A3', location: 'Mönchhof - Frankfurter Kreuz', direction: 'Würzburg', delayMin: 25, trafficType: 'QUEUING_TRAFFIC' }],
       fired: { clock: '2026-10-20T08:10:00', origin: 'wiesbaden', delayMin: 15 },
       geo: { geometry: '{"type":"LineString","coordinates":[[8.47,50.048],[8.55,50.058]]}' } })
-    assert.deepEqual([v.running, v.clockText, v.report, v.note], [true, 'Tue 20 Oct · 08:10', 'A3 Mönchhof - Frankfurter Kreuz → Würzburg: +25 min', 'Rule fired at 08:10: wiesbaden +15 min over typical'])
+    assert.deepEqual([v.running, v.paused, v.clockText, v.report, v.note], [true, false, 'Tue 20 Oct · 08:10', 'A3 Mönchhof - Frankfurter Kreuz → Würzburg: +25 min', 'Rule fired at 08:10: wiesbaden +15 min over typical'])
     assert.deepEqual(v.map.routes, [{ position: '8.47;50.048;0;8.55;50.058;0' }])
     assert.equal(v.map.center, '8.5161;50.04795', 'the middle of the box around FRA and the jam line')
     assert.deepEqual(v.map.spots, [{ position: '8.5622;50.0379;0', label: 'FRA', type: 'Default' }])
     assert.equal(v.map.config.MapProvider[0].name, 'OSM')
     assert.deepEqual(logic.replayView({ running: false, samples: [] }), { running: false, clock: '' })
     assert.deepEqual(logic.replayView(null), { running: false, clock: '' })
+  })
+
+  test('the pause of the replay passes through to the panel', () => {
+    const r = { running: true, clock: '2026-10-20T08:10:00', samples: [] }
+    assert.deepEqual([true, false, undefined].map(paused => logic.replayView({ ...r, paused }).paused), [true, false, false])
   })
 
   test('a replay without a usable route geometry still gives the card, with no route', () => {
@@ -363,7 +368,7 @@ describe('cockpit logic', () => {
     const { config, center, zoom } = logic.baseMap
     assert.ok(config.MapProvider.length && config.MapLayerStacks.length, 'GeoMap ignores a configuration without both')
     assert.match(center, /^\d+(\.\d+)?;\d+(\.\d+)?$/)
-    assert.ok(zoom >= 0)
+    assert.equal(zoom, 12, 'the map is large now: the panel takes half the page')
   })
 })
 

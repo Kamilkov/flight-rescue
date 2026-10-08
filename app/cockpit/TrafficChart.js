@@ -1,4 +1,4 @@
-// The jam card's chart: drive time above typical per approach, the rule's threshold and where it fired.
+// The Traffic panel's chart: drive time above typical per approach, the rule's threshold and where it fired.
 // Geometry comes from logic.chart; this control only writes it as SVG (numbers and approach names, both sanitised).
 sap.ui.define(['sap/ui/core/Control'], Control => {
   'use strict'

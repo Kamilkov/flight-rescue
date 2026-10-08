@@ -28,4 +28,8 @@ service ControlService {
   action replayTraffic() returns fr.TrafficReplay;
   /** The replay so far: the demo clock, the samples and reports played, and where the rule fired. Changes nothing. */
   function trafficReplay() returns fr.TrafficReplay;
+  /** Pause the running replay (no more samples play) or resume it. Answers once a sample in flight has ended. */
+  action pauseReplay(paused : Boolean) returns fr.TrafficReplay;
+  /** Play exactly one sample of the paused replay, as the timer would: the firing sample opens the TrafficJam disruption and starts the agent. */
+  action stepReplay() returns fr.TrafficReplay;
 }

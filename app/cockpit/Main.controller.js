@@ -13,7 +13,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
     return data
   }
 
-  // The jam card's model. Its GeoMap throws on an undefined configuration or zoom level, so the map's base settings
+  // The Traffic panel's model. Its GeoMap throws on an undefined configuration or zoom level, so the map's base settings
   // are in the model before any replay and after a reset, when replayView has no map.
   const jam = r => ({ map: logic.baseMap, ...logic.replayView(r) })
 
@@ -65,7 +65,7 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
       this.set('/disruption', next)
     },
 
-    // The jam card follows the replay on the server (started here or elsewhere). A failing read keeps the card as it was and
+    // The Traffic panel follows the replay on the server (started here or elsewhere). A failing read keeps the panel as it was and
     // shows in its pane; it never throws, so it cannot stop the rest of poll().
     async loadReplay() {
       try { this.set('/replay', jam(await control('trafficReplay()'))) } catch (e) { this.set('/errors/disruption', e.message) }
@@ -151,6 +151,21 @@ sap.ui.define(['sap/ui/core/mvc/Controller', 'sap/ui/model/json/JSONModel', './a
     onReplay() {
       this.run('disruption', 'Starting the replay', async () => {
         this.set('/replay', jam(await control('replayTraffic', {})))
+      })
+    },
+
+    // Pause or resume the replay on the server; its answer is the replay as it stands.
+    onPause() {
+      const paused = !this.get('/replay/paused')
+      this.run('disruption', paused ? 'Pausing the replay' : 'Resuming the replay', async () => {
+        this.set('/replay', jam(await control('pauseReplay', { paused })))
+      })
+    },
+
+    // One sample of the paused replay.
+    onStep() {
+      this.run('disruption', 'Playing the next sample', async () => {
+        this.set('/replay', jam(await control('stepReplay', {})))
       })
     },
 

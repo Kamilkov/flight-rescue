@@ -131,17 +131,17 @@ sap.ui.define([], () => {
     return { text: 'The agent is working on the cancellation…', kind: 'wait' }
   }
 
-  // The jam card's map: OpenStreetMap tiles, as in the Drone Telemetry app's GeoMap.
+  // The Traffic panel's map: OpenStreetMap tiles, as in the Drone Telemetry app's GeoMap.
   const OSM = {
     MapProvider: [{ name: 'OSM', type: '', description: 'OpenStreetMap', tileX: '256', tileY: '256', maxLOD: '19',
       copyright: '© OpenStreetMap contributors', Source: [{ id: 's1', url: 'https://tile.openstreetmap.org/{LOD}/{X}/{Y}.png' }] }],
     MapLayerStacks: [{ name: 'DEFAULT', MapLayer: [{ name: 'layer1', refMapProvider: 'OSM', opacity: '1.0', colBkgnd: 'RGB(255,255,255)' }] }]
   }
   const FRA = [8.5622, 50.0379]
-  // What the jam card's GeoMap needs before there is a replay to show: it throws on an undefined configuration or zoom level.
-  const BASE_MAP = { config: OSM, center: `${FRA[0]};${FRA[1]}`, zoom: 11 }
+  // What the Traffic panel's GeoMap needs before there is a replay to show: it throws on an undefined configuration or zoom level.
+  const BASE_MAP = { config: OSM, center: `${FRA[0]};${FRA[1]}`, zoom: 12 }
 
-  /** The jam card's chart: drive time above typical (min) per approach as SVG coordinates. x spans the whole replay
+  /** The Traffic panel's chart: drive time above typical (min) per approach as SVG coordinates. x spans the whole replay
    *  (`steps` sample times), so the lines grow left to right; y runs from 0 to above the rule's threshold. */
   function chart(r, width = 300, height = 110) {
     const samples = r?.samples ?? [], clocks = [...new Set(samples.map(s => s.clock))].sort()
@@ -160,7 +160,7 @@ sap.ui.define([], () => {
   /** "Tue 20 Oct · 08:10" from the demo clock's naive date-time. */
   const clockText = c => { const d = new Date(`${c}Z`); return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} · ${c.slice(11, 16)}` }
 
-  /** The jam card: label, demo clock, chart, latest report, rule note, map. Before a replay: { running, clock: '' }. */
+  /** The Traffic panel: label, demo clock, chart, latest report, rule note, map. Before a replay: { running, clock: '' }. */
   function replayView(r) {
     if (!r?.clock) return { running: !!r?.running, clock: '' }
     const report = r.reports?.at(-1), point = p => `${p[0]};${p[1]};0`
@@ -169,7 +169,7 @@ sap.ui.define([], () => {
     const mid = k => { const v = [FRA[k], ...coordinates.map(c => c[k])]; return Math.round((Math.min(...v) + Math.max(...v)) / 2 * 1e5) / 1e5 }
     const what = report && (report.delayMin != null ? `+${report.delayMin} min` : String(report.trafficType ?? '').toLowerCase().replace(/_/g, ' '))
     return {
-      running: !!r.running, clock: r.clock, label: r.label ?? '', clockText: clockText(r.clock), chart: chart(r),
+      running: !!r.running, paused: !!r.paused, clock: r.clock, label: r.label ?? '', clockText: clockText(r.clock), chart: chart(r),
       report: report ? `${report.road} ${report.location ?? ''} → ${report.direction ?? ''}: ${what}`.replace(/\s+/g, ' ') : '',
       note: r.note ?? (r.fired ? `Rule fired at ${r.fired.clock.slice(11, 16)}: ${r.fired.origin} +${r.fired.delayMin} min over typical` : ''),
       map: { ...BASE_MAP, ...(route && { center: `${mid(0)};${mid(1)}` }), spots: [{ position: point(FRA), label: 'FRA', type: 'Default' }],

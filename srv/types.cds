@@ -133,6 +133,7 @@ type Cancellation {
 type TrafficReplay {
   running    : Boolean;
   done       : Boolean;
+  paused     : Boolean; // no sample plays until it is resumed or stepped; never true once done
   label      : String;
   clock      : String;
   steps      : Integer; // sample times in the whole replay

@@ -54,26 +54,37 @@ async function start(flight) {
   const hit = fires(incident.samples), departure = Date.parse(`${abap.iso(f.FlightDate)}T${f.DepartureTime}Z`)
   // The firing sample lands LEAD_MIN before departure; without one, the replay ends 30 min before it.
   const offset = hit ? departure - LEAD_MIN * 6e4 - Date.parse(hit.ts) : departure - 30 * 6e4 - Date.parse(times.at(-1))
-  const run = replay = { incident, times, offset, stepMs, step: 0, airport: f.AirportFrom, fired: null, disruption: null, done: false, timer: null, pending: null }
+  const run = replay = { incident, times, offset, stepMs, step: 0, airport: f.AirportFrom, fired: null, disruption: null, done: false, paused: false, timer: null, chain: Promise.resolve() }
   schedule(run, 0)
   return state()
 }
 
+// One timer per run: scheduling replaces it, so a resume racing a tick's own reschedule leaves one.
 function schedule(run, ms) {
+  clearTimeout(run.timer)
   run.timer = setTimeout(() => {
-    run.pending = tick(run).catch(e => LOG.error('replay step failed:', e.message))
-      .then(() => { if (replay === run && !run.done) schedule(run, run.stepMs) })
+    play(run, true).catch(() => {}) // logged by play
+      .then(() => { if (replay === run && !run.done && !run.paused) schedule(run, run.stepMs) })
   }, ms)
 }
 
+/** Plays the next sample once every sample before it has ended. The timer and Step both come through here, so two samples
+ *  never overlap and none is skipped or played twice (tick takes its sample inside the queue); stop() waits for the queue.
+ *  `byTimer`: a timer's sample still queued when a pause comes gives way to it. */
+function play(run, byTimer) {
+  const p = run.chain.then(() => byTimer && run.paused ? null : tick(run))
+  run.chain = p.catch(e => LOG.error('replay step failed:', e.message))
+  return p
+}
+
 async function tick(run) {
-  if (replay !== run) return
+  if (replay !== run || run.done) return
   const now = run.times[run.step++]
   if (!run.fired) {
     const hit = fires(run.incident.samples.filter(s => s.ts <= now))
     if (hit) { run.fired = hit; run.disruption = await open(run, hit) }
   }
-  if (run.step >= run.times.length) run.done = true
+  if (run.step >= run.times.length) { run.done = true; run.paused = false } // paused only while there is more to play
 }
 
 async function open(run, hit) {
@@ -96,17 +107,35 @@ async function stop() {
   replay = null
   if (!run) return
   clearTimeout(run.timer)
-  await run.pending
+  await run.chain
+}
+
+/** Pauses the replay (no more samples) or resumes it. Answers once a sample in flight has ended, so a paused clock stays. */
+async function pause(paused) {
+  const run = replay
+  if (!run || run.done) throw cds.error(409, 'NO_REPLAY: No replay is running.')
+  run.paused = !!paused
+  if (!run.paused) schedule(run, run.stepMs) // a timer still pending while paused fires into play(), which skips
+  await run.chain
+  return state()
+}
+
+/** Plays exactly one sample of a paused replay, as the timer would (so the firing one opens the jam), and answers with the state after it. */
+async function step() {
+  const run = replay
+  if (!run?.paused) throw cds.error(409, 'NOT_PAUSED: Pause the replay before stepping.')
+  await play(run)
+  return state()
 }
 
 /** What the cockpit shows: the replay so far, on the demo clock. */
 function state() {
   const run = replay
-  if (!run) return { running: false, done: false, rule: RULE, samples: [], reports: [] }
+  if (!run) return { running: false, done: false, paused: false, rule: RULE, samples: [], reports: [] }
   const now = run.times[run.step - 1], clock = ts => naive(Date.parse(ts) + run.offset), played = x => now !== undefined && x.ts <= now
   const geo = run.incident.geo
   return {
-    running: !run.done, done: run.done, label: run.incident.label ?? null, clock: now === undefined ? null : clock(now),
+    running: !run.done, done: run.done, paused: run.paused, label: run.incident.label ?? null, clock: now === undefined ? null : clock(now),
     steps: run.times.length, rule: RULE,
     samples: run.incident.samples.filter(played).map(s => ({ clock: clock(s.ts), origin: s.origin, live: s.live, typical: s.typical })),
     reports: (run.incident.reports ?? []).filter(played)
@@ -118,4 +147,4 @@ function state() {
   }
 }
 
-module.exports = { fires, start, stop, state, RULE, LEAD_MIN }
+module.exports = { fires, start, stop, pause, step, state, RULE, LEAD_MIN }

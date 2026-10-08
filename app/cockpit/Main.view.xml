@@ -13,6 +13,8 @@
         </contentRight>
       </Bar>
     </customHeader>
+    <!-- A column: the panes on top, the Traffic panel below them (the panes keep the full height without one). -->
+    <VBox class="frBody" renderType="Bare">
     <HBox class="frPanes" renderType="Bare">
 
       <VBox class="frPane frPane1" renderType="Bare">
@@ -28,24 +30,6 @@
         <Input id="reason" value="{/form/reason}" maxLength="100"/>
         <Button text="Cancel flight in ABAP" type="Emphasized" press=".onCancel" enabled="{= !${/busy} }"/>
         <Button text="Replay traffic incident" press=".onReplay" enabled="{= !${/busy} &amp;&amp; !${/replay/running} }"/>
-        <VBox class="frCard frJam" renderType="Bare" visible="{= !!${/replay/clock} }">
-          <Label text="{/replay/label}" wrapping="true"/>
-          <ObjectStatus text="{/replay/clockText}" icon="sap-icon://history"/>
-          <fr:TrafficChart chart="{/replay/chart}"/>
-          <ObjectStatus text="{/replay/report}" state="Warning" visible="{= !!${/replay/report} }"/>
-          <Text text="{/replay/note}" visible="{= !!${/replay/note} }"/>
-          <vbm:GeoMap width="100%" height="200px" mapConfiguration="{/replay/map/config}" refMapLayerStack="DEFAULT"
-            centerPosition="{/replay/map/center}" zoomlevel="{/replay/map/zoom}" legendVisible="false" scaleVisible="false">
-            <vbm:vos>
-              <vbm:Routes items="{path: '/replay/map/routes', templateShareable: false}">
-                <vbm:items><vbm:Route position="{position}" color="RGB(187,0,0)" linewidth="6"/></vbm:items>
-              </vbm:Routes>
-              <vbm:Spots items="{path: '/replay/map/spots', templateShareable: false}">
-                <vbm:items><vbm:Spot position="{position}" text="{label}" tooltip="{label}" type="{type}"/></vbm:items>
-              </vbm:Spots>
-            </vbm:vos>
-          </vbm:GeoMap>
-        </VBox>
         <Text text="{/waiting}" visible="{= !!${/waiting} }" class="sapUiTinyMarginTop"/>
         <Title text="Open disruptions" level="H3" class="sapUiSmallMarginTop"/>
         <List items="{/disruptions}" noDataText="No open disruption" showSeparators="None">
@@ -127,5 +111,33 @@
       </VBox>
 
     </HBox>
+    <!-- The Traffic panel takes the bottom half while there is a replay: clock, controls and chart on the left, the map on the right. -->
+    <HBox class="frPane frTraffic" renderType="Bare" visible="{= !!${/replay/clock} }">
+      <VBox class="frTrafficInfo" renderType="Bare">
+        <Label text="{/replay/label}" wrapping="true"/>
+        <HBox class="frTrafficBar" renderType="Bare">
+          <ObjectStatus text="{/replay/clockText}" icon="sap-icon://history"/>
+          <Button text="{= ${/replay/paused} ? 'Resume' : 'Pause' }" press=".onPause" visible="{/replay/running}" enabled="{= !${/busy} }"/>
+          <Button text="Step ▸" tooltip="Play the next sample" press=".onStep" visible="{/replay/running}" enabled="{= !${/busy} &amp;&amp; !!${/replay/paused} }"/>
+        </HBox>
+        <fr:TrafficChart chart="{/replay/chart}"/>
+        <ObjectStatus text="{/replay/report}" state="Warning" visible="{= !!${/replay/report} }"/>
+        <Text text="{/replay/note}" visible="{= !!${/replay/note} }"/>
+      </VBox>
+      <VBox class="frTrafficMap" renderType="Bare">
+        <vbm:GeoMap width="100%" height="100%" mapConfiguration="{/replay/map/config}" refMapLayerStack="DEFAULT"
+          centerPosition="{/replay/map/center}" zoomlevel="{/replay/map/zoom}" legendVisible="false" scaleVisible="false">
+          <vbm:vos>
+            <vbm:Routes items="{path: '/replay/map/routes', templateShareable: false}">
+              <vbm:items><vbm:Route position="{position}" color="RGB(187,0,0)" linewidth="6"/></vbm:items>
+            </vbm:Routes>
+            <vbm:Spots items="{path: '/replay/map/spots', templateShareable: false}">
+              <vbm:items><vbm:Spot position="{position}" text="{label}" tooltip="{label}" type="{type}"/></vbm:items>
+            </vbm:Spots>
+          </vbm:vos>
+        </vbm:GeoMap>
+      </VBox>
+    </HBox>
+    </VBox>
   </Page>
 </mvc:View>

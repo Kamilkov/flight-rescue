@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, test, beforeEach } from 'node:test'
+import { describe, test, beforeEach, afterEach } from 'node:test'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const incident = join(root, 'test/fixtures/traffic-incident.json')
@@ -16,6 +16,7 @@ const { default: cds } = await import('@sap/cds')
 const srv = cds.test(root, '--with-mocks')
 const require = createRequire(import.meta.url)
 const traffic = require('../srv/lib/traffic.js')
+const abap = require('../srv/lib/abap.js')
 
 const as = user => ({ validateStatus: () => true, auth: { username: user, password: '' } })
 const ok = (res, status = 200) => { assert.equal(res.status, status, JSON.stringify(res.data)); return res.data }
@@ -127,6 +128,161 @@ describe('the replay', () => {
 
   test('only dispatchers replay', async () => {
     assert.equal((await srv.post('/odata/v4/control/replayTraffic', {}, as('viewer'))).status, 403)
+  })
+})
+
+describe('pausing and stepping', () => {
+  const played = s => new Set(s.samples.map(x => x.clock)).size // sample times played so far
+  const wait = ms => new Promise(r => setTimeout(r, ms))
+  const jam = () => until(async () => { const x = await SELECT.one.from('fr.Disruptions').where({ kind: 'TrafficJam' }); return x?.agentStatus && x.agentStatus !== 'Working' && x })
+  // Holds the INSERT of a disruption (the firing sample's) until released; inert afterwards.
+  const hold = () => {
+    let open = true, free
+    const gate = new Promise(r => { free = r }), h = { entered: false, release() { open = false; free() } }
+    cds.db.before('INSERT', 'fr.Disruptions', async () => { if (open) { h.entered = true; await gate } })
+    return h
+  }
+  // A long interval: the first sample plays at once, then nothing until a Step, unless a test shortens it.
+  beforeEach(() => { cds.env.requires.traffic.stepMs = 5000 })
+  afterEach(async () => { await traffic.stop(); cds.env.requires.traffic.stepMs = 20 })
+
+  test('Pause stops the clock: it and the samples stay for more than two intervals; Resume plays on to the end', async () => {
+    cds.env.requires.traffic.stepMs = 150
+    ok(await control('replayTraffic'))
+    await until(async () => played(ok(await get('trafficReplay()'))) >= 1)
+    const paused = ok(await control('pauseReplay', { paused: true }))
+    assert.deepEqual([paused.running, paused.paused, paused.done], [true, true, false])
+    await wait(2 * 150 + 100)
+    const later = ok(await get('trafficReplay()'))
+    assert.deepEqual([later.clock, later.samples.length, later.paused], [paused.clock, paused.samples.length, true])
+
+    const resumed = ok(await control('pauseReplay', { paused: false }))
+    assert.deepEqual([resumed.running, resumed.paused], [true, false])
+    const s = await finished()
+    assert.deepEqual([s.paused, played(s), s.samples.length, s.clock], [false, 6, 12, '2026-10-20T08:30:00'])
+    await jam()
+  })
+
+  test('each Step plays exactly one sample time; the firing one opens the TrafficJam disruption; the last ends the replay', async () => {
+    ok(await control('replayTraffic'))
+    await until(async () => played(ok(await get('trafficReplay()'))) === 1)
+    let s = ok(await control('pauseReplay', { paused: true }))
+    assert.deepEqual([played(s), s.fired, s.disruption], [1, null, null])
+    assert.deepEqual(await SELECT.from('fr.Disruptions'), [])
+
+    for (const n of [2, 3]) { // the fixture's rule fires at its 4th sample time
+      s = ok(await control('stepReplay'))
+      assert.deepEqual([played(s), s.fired, s.paused], [n, null, true], 'a Step keeps the pause')
+    }
+    assert.deepEqual(await SELECT.from('fr.Disruptions'), [])
+    s = ok(await control('stepReplay'))
+    assert.equal(played(s), 4)
+    assert.deepEqual(s.fired, { clock: '2026-10-20T08:10:00', origin: 'wiesbaden', delayMin: 15 })
+    const d = await jam() // the agent started for it
+    assert.deepEqual([d.ID, d.kind, d.jamTime, d.approach], [s.disruption, 'TrafficJam', '08:10:00', 'wiesbaden'])
+
+    assert.equal(played(ok(await control('stepReplay'))), 5)
+    s = ok(await control('stepReplay'))
+    assert.deepEqual([played(s), s.done, s.running, s.paused, s.samples.length], [6, true, false, false, 12])
+    assert.equal((await SELECT.from('fr.Disruptions')).length, 1, 'the jam opened once')
+    assert.equal((await control('pauseReplay', { paused: true })).status, 409, 'a finished replay cannot be paused')
+  })
+
+  test('Step without a pause, and Pause without a replay, are refused', async () => {
+    const none = await control('pauseReplay', { paused: true })
+    assert.equal(none.status, 409)
+    assert.match(none.data.error.message, /^NO_REPLAY: /)
+    ok(await control('replayTraffic'))
+    const running = await control('stepReplay')
+    assert.equal(running.status, 409)
+    assert.match(running.data.error.message, /^NOT_PAUSED: /)
+  })
+
+  test('a Step queued behind the last sample plays nothing more', async () => {
+    cds.env.requires.traffic.data = join(root, 'test/fixtures/traffic-flat.json') // no jam, so no agent
+    await traffic.start(abap.MOCK_TRAFFIC)
+    await traffic.pause(true)
+    for (let i = 0; i < 5; i++) await traffic.step()
+    await Promise.all([traffic.step(), traffic.step()]) // both pass the check before either plays
+    const s = traffic.state()
+    assert.deepEqual([played(s), s.done, s.paused, s.clock], [6, true, false, '2026-10-20T09:40:00'], 'the clock stays on the last sample, 30 min before departure')
+  })
+
+  test('Reset while paused leaves no replay, not paused, and no disruption opens afterwards', async () => {
+    cds.env.requires.traffic.stepMs = 100
+    ok(await control('replayTraffic'))
+    await until(async () => played(ok(await get('trafficReplay()'))) >= 1)
+    ok(await control('pauseReplay', { paused: true }))
+    ok(await control('resetDemo'))
+    await wait(300)
+    const s = ok(await get('trafficReplay()'))
+    assert.deepEqual([s.running, s.paused, s.clock ?? null], [false, false, null])
+    assert.deepEqual(await SELECT.from('fr.Disruptions'), [])
+  })
+
+  test('a Step in flight holds back the timer and a pause: samples never overlap, none is skipped or played twice', async () => {
+    cds.env.requires.traffic.stepMs = 30
+    const held = hold()
+    try {
+      await traffic.start(abap.MOCK_TRAFFIC)
+      await traffic.pause(true) // in the same tick as the start: before the first sample
+      assert.equal(played(traffic.state()), 0)
+      for (let i = 0; i < 3; i++) await traffic.step()
+      const stepping = traffic.step() // the 4th sample fires the rule, held inside its INSERT
+      await until(() => held.entered)
+      const resumed = traffic.pause(false) // arms the timer; answers when the step ends
+      await wait(200) // several intervals: the timer's sample is queued behind the step
+      assert.equal(played(traffic.state()), 4, 'it waits for the step')
+      let answered = false
+      const paused = traffic.pause(true).then(() => { answered = true }) // the queued sample must give way to this
+      await wait(50)
+      assert.equal(answered, false, 'a pause answers when the sample in flight has ended')
+      held.release()
+      await Promise.all([stepping, resumed, paused])
+      await wait(100)
+      assert.deepEqual([played(traffic.state()), traffic.state().paused], [4, true])
+      await traffic.pause(false)
+      const s = await finished()
+      assert.deepEqual([played(s), s.samples.length, s.paused, s.disruption === (await jam()).ID], [6, 12, false, true])
+      assert.equal((await SELECT.from('fr.Disruptions')).length, 1)
+    } finally { held.release() }
+  })
+
+  test('Pause and Resume while a sample is in flight leave one timer: the pace does not double', async () => {
+    cds.env.requires.traffic.stepMs = 100
+    const held = hold()
+    try {
+      await traffic.start(abap.MOCK_TRAFFIC)
+      await until(() => held.entered) // the timer plays the 4th sample, which fires the rule
+      const toggled = Promise.all([traffic.pause(true), traffic.pause(false)]) // arms a timer; the tick reschedules itself when it ends
+      await wait(80)
+      held.release()
+      await toggled
+      await wait(150) // two timers would have played the 5th and the 6th sample by now; one plays the 6th 100 ms after the 5th
+      assert.equal(traffic.state().done, false)
+      await finished()
+      await jam()
+    } finally { held.release() }
+  })
+
+  test('stop() waits for a Step in flight, and no agent starts for the jam it writes', async () => {
+    const held = hold(), agent = require('../srv/lib/agent-start.js'), realStart = agent.start, started = []
+    agent.start = ID => { started.push(ID) } // a spy: no real agent runs
+    try {
+      await traffic.start(abap.MOCK_TRAFFIC)
+      await traffic.pause(true)
+      for (let i = 0; i < 3; i++) await traffic.step()
+      const stepping = traffic.step() // the 4th sample fires the rule, held inside its INSERT
+      await until(() => held.entered)
+      let stopped = false
+      const stopping = traffic.stop().then(() => { stopped = true })
+      await wait(50)
+      assert.equal(stopped, false, 'stop waits for the step')
+      held.release()
+      await Promise.all([stopping, stepping])
+      assert.deepEqual(started, [])
+      assert.deepEqual([traffic.state().running, traffic.state().paused], [false, false])
+    } finally { held.release(); agent.start = realStart }
   })
 })
 

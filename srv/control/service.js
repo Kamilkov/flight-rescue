@@ -33,6 +33,8 @@ module.exports = class ControlService extends cds.ApplicationService {
     this.on('demoInfo', demoInfo)
     this.on('replayTraffic', () => traffic.start(demoInfo().trafficFlight))
     this.on('trafficReplay', () => traffic.state())
+    this.on('pauseReplay', req => traffic.pause(req.data.paused))
+    this.on('stepReplay', () => traffic.step())
     this.on('resetDemo', async () => {
       await traffic.stop() // first: a step of a running replay must not open a disruption after the reset
       if (abap.connected()) demoFlight = await abap.resetDemo() // first: if ABAP refuses, the app keeps its state
