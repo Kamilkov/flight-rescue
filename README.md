@@ -72,7 +72,7 @@ One page for the whole flow, at http://localhost:4004/cockpit/index.html (sign i
 On a phone, `/cockpit/mobile.html` has just the cancel form and one status line (waiting for ABAP, agent working,
 plan waiting for approval, or the error), with a link to this page for the approval.
 
-3. **Booking system:** one dot per seat: the cancelled flight, then a row for each of up to five itineraries (the plan's first) with its flights side by side. The seats are read on every refresh, ABAP's list of itineraries at most every 30 s per disruption. The affected passengers are highlighted and move to their new flights as ABAP confirms each booking.
+3. **Booking system:** a seat map per flight, shaped like its aircraft: the cancelled flight, then a row for each of up to five itineraries (the plan's first) with its flights side by side. The seats are read on every refresh, ABAP's list of itineraries at most every 30 s per disruption. The affected passengers are highlighted and move to their new flights as ABAP confirms each booking.
 
 **Reset demo** starts over. Against ABAP it runs `ZCL_FR_GENERATE_DATA` through the ADT class-run endpoint (developer user on a trial system only), which recopies `/DMO/BOOKING` and rebuilds the demo scenario, and returns the scenario's flight. Against the mock it clears disruptions, plans and the mock's cancellations; restart the app to restore the mock bookings.
 
